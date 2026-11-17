@@ -36,7 +36,7 @@ public class GamesController
     {
         // Редакционная подборка: данные и изображения берём из RAWG.
         string[] slugs = ["elden-ring", "hollow-knight"];
-        string[] rawgGames = await Task.WhenAll(slugs.Select(_rawgClient.GetGameAsync));
+        string[] rawgGames = await Task.WhenAll(slugs.Select(slug => _rawgClient.GetGameAsync(slug)));
         var games = rawgGames.Select(json =>
         {
             using var document = JsonDocument.Parse(json);
