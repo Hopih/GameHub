@@ -30,4 +30,14 @@ public class RawgClient
 
         return await response.Content.ReadAsStringAsync();
     }
+
+    public async Task<string> GetGameAsync(string slug)
+    {
+        string requestUrl = $"https://api.rawg.io/api/games/{Uri.EscapeDataString(slug)}?key={Uri.EscapeDataString(_apiKey)}";
+
+        using var response = await _httpClient.GetAsync(requestUrl);
+        response.EnsureSuccessStatusCode();
+
+        return await response.Content.ReadAsStringAsync();
+    }
 }

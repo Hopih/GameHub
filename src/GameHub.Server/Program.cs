@@ -26,5 +26,9 @@ var gamesController = new GamesController(rawgClient);
 router.Register("GET", "/health", healthController.CheckHealthAsync);
 router.Register("GET", "/", homeController.IndexAsync);
 router.Register("GET","/games", gamesController.GetAllAsync);
-var server = new HttpServer(router);
-await server.RunAsync("http://localhost:8080/");
+router.Register("GET", "/games/featured", gamesController.GetFeaturedAsync);
+
+var staticFiles = new StaticFileHandler(Path.Combine(AppContext.BaseDirectory, "wwwroot"));
+var server = new HttpServer(router, staticFiles);
+string prefix = args.Length > 0 ? args[0] : "http://localhost:8080/";
+await server.RunAsync(prefix);

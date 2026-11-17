@@ -1,0 +1,247 @@
+:root {
+    color-scheme: dark;
+    --background: #111314;
+    --surface: #1a1d1f;
+    --surface-hover: #232729;
+    --text: #f4f5f3;
+    --muted: #a3a8a6;
+    --lime: #c3fa42;
+    --line: #2b3030;
+    font-family: "Inter", "Segoe UI", Arial, sans-serif;
+    font-synthesis: none;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html {
+    scroll-behavior: smooth;
+    scroll-padding-top: 100px;
+}
+
+body {
+    margin: 0;
+    background: var(--background);
+    color: var(--text);
+    font-size: 15px;
+    line-height: 1.5;
+}
+
+button, input, select {
+    font: inherit;
+}
+
+button, a, input, select {
+    -webkit-tap-highlight-color: transparent;
+}
+
+button, select {
+    cursor: pointer;
+}
+
+button {
+    color: inherit;
+}
+
+a {
+    color: inherit;
+    text-decoration: none;
+}
+
+img {
+    display: block;
+    max-width: 100%;
+}
+
+button, input {
+    border-radius: 0;
+}
+
+button {
+    border: 0;
+}
+
+button:disabled {
+    cursor: wait;
+}
+
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible {
+    outline: 2px solid var(--lime);
+    outline-offset: 5px;
+}
+
+[hidden] {
+    display: none !important;
+}
+
+::selection {
+    background: var(--lime);
+    color: #151a0b;
+}
+
+.icon-definitions {
+    position: absolute;
+    width: 0;
+    height: 0;
+    overflow: hidden;
+}
+
+.icon {
+    width: 21px;
+    height: 21px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.7;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    flex: 0 0 auto;
+}
+
+.skip-link {
+    position: fixed;
+    top: 12px;
+    left: 12px;
+    padding: 12px 20px;
+    background: var(--lime);
+    color: #111;
+    z-index: 20;
+    transform: translateY(-150%);
+    border-radius: 8px;
+}
+
+.skip-link:focus {
+    transform: none;
+}
+
+.button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    min-height: 49px;
+    padding: 12px 24px;
+    font-weight: 700;
+    font-size: 15px;
+    border-radius: 8px;
+    transition: background .18s, transform .18s;
+}
+
+.button:hover {
+    transform: translateY(-2px);
+}
+
+.button-primary {
+    color: #152006;
+    background: var(--lime);
+}
+
+.button-primary:hover {
+    background: #d0ff64;
+}
+
+.button-primary .icon {
+    width: 23px;
+    height: 23px;
+}
+
+.button-secondary {
+    color: var(--text);
+    background: #292f2c;
+    border: 1px solid #3c443d;
+}
+
+.button-secondary:hover {
+    background: #35402f;
+}
+
+.text-link {
+    background: transparent;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    color: #c9cecb;
+    font-weight: 600;
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+.text-link:hover {
+    color: var(--lime);
+}
+
+.text-link .icon {
+    width: 17px;
+    height: 17px;
+}
+
+.section-note {
+    color: #8e9a92;
+    margin: 13px 0 0;
+    font-size: 12px;
+}
+
+.section-note:empty {
+    display: none;
+}
+
+.notification {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    z-index: 20;
+    padding: 12px 21px;
+    border: 1px solid #5c7143;
+    border-radius: 9px;
+    background: #243021;
+    color: #e3f5ce;
+    font-size: 13px;
+    box-shadow: 0 8px 30px #0005;
+    opacity: 0;
+    transform: translate(-50%, 15px);
+    pointer-events: none;
+    transition: opacity .2s, transform .2s;
+}
+
+.notification.is-visible {
+    opacity: 1;
+    transform: translate(-50%, 0);
+}
+
+@media (max-width: 900px) {
+    html {
+        scroll-padding-top: 135px;
+    }
+}
+
+@media (max-width: 560px) {
+    .button {
+        min-height: 46px;
+        font-size: 13px;
+        padding: 11px 20px;
+    }
+
+    .section-note {
+        font-size: 10px;
+    }
+
+    .notification {
+        max-width: calc(100% - 32px);
+        width: max-content;
+        padding: 11px 15px;
+        font-size: 11px;
+        bottom: 16px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    html {
+        scroll-behavior: auto;
+    }
+
+    *, *::before, *::after {
+        animation: none !important;
+        transition: none !important;
+    }
+}

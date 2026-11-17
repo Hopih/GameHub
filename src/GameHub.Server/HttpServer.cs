@@ -5,10 +5,12 @@ namespace GameHub.Server;
 public class HttpServer
 {
     private readonly Router _router;
+    private readonly StaticFileHandler _staticFiles;
 
-    public HttpServer(Router router)
+    public HttpServer(Router router, StaticFileHandler staticFiles)
     {
         _router = router;
+        _staticFiles = staticFiles;
     }
 
     public async Task RunAsync(string prefix)
@@ -26,6 +28,11 @@ public class HttpServer
 
             try
             {
+                if (await _staticFiles.TryHandleAsync(context))
+                {
+                    continue;
+                }
+
                 await _router.HandleAsync(context);
             }
             catch (Exception exception)

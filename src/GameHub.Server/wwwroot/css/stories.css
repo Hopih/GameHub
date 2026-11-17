@@ -1,0 +1,152 @@
+.story-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 28px;
+}
+
+.story-card {
+    display: grid;
+    grid-template-columns: 43% 1fr;
+    gap: 20px;
+    min-width: 0;
+    align-items: stretch;
+}
+
+.story-cover {
+    height: 176px;
+    width: 100%;
+    object-fit: cover;
+    border-radius: 10px;
+}
+
+.story-content {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 3px 0;
+}
+
+.story-tag {
+    color: var(--lime);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: .9px;
+}
+
+.story-content h3 {
+    font-size: 18px;
+    line-height: 1.25;
+    letter-spacing: -.35px;
+    margin: 8px 0;
+}
+
+.story-content p {
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--muted);
+    margin: 0 0 12px;
+}
+
+.story-content .text-link {
+    font-size: 10px;
+    margin-top: auto;
+}
+
+@media (max-width: 1180px) {
+    .story-card {
+        grid-template-columns: 39% 1fr;
+        gap: 15px;
+    }
+
+    .story-content h3 {
+        font-size: 16px;
+    }
+}
+
+@media (max-width: 900px) {
+    .story-grid {
+        grid-template-columns: 1fr;
+        gap: 26px;
+    }
+
+    .story-card {
+        grid-template-columns: 39% 1fr;
+        gap: 22px;
+    }
+
+    .story-cover {
+        height: 165px;
+    }
+
+    .story-content h3 {
+        font-size: 21px;
+    }
+
+    .story-content p {
+        font-size: 13px;
+    }
+
+    .story-content .text-link {
+        font-size: 12px;
+    }
+}
+
+@media (max-width: 560px) {
+    .story-grid {
+        gap: 22px;
+    }
+
+    .story-card {
+        grid-template-columns: 40% 1fr;
+        gap: 15px;
+    }
+
+    .story-cover {
+        height: 151px;
+        border-radius: 8px;
+    }
+
+    .story-content {
+        padding: 0;
+    }
+
+    .story-tag {
+        font-size: 8px;
+    }
+
+    .story-content h3 {
+        font-size: 16px;
+        margin: 6px 0;
+    }
+
+    .story-content p {
+        font-size: 10px;
+        line-height: 1.5;
+        margin-bottom: 8px;
+    }
+
+    .story-content .text-link {
+        font-size: 9px;
+        gap: 4px;
+    }
+
+    .story-content .text-link .icon {
+        width: 13px;
+        height: 13px;
+    }
+}
+
+.story-cover {
+    overflow: hidden;
+    background: linear-gradient(135deg, #253829, #172327);
+}
+
+.story-cover img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.spotlight-retry {
+    margin-top: 12px;
+}

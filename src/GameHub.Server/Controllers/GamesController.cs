@@ -31,4 +31,29 @@ public class GamesController
             HttpStatusCode.OK,
             "application/json; charset=utf-8");
     }
+
+    public async Task GetFeaturedAsync(HttpListenerContext context)
+    {
+        // Редакционная подборка: данные и изображения берём из RAWG.
+        string[] slugs = ["elden-ring", "hollow-knight"];
+        string[] rawgGames = await Task.WhenAll(slugs.Select(_rawgClient.GetGameAsync));
+        var games = rawgGames.Select(json =>
+        {
+            using var document = JsonDocument.Parse(json);
+            var game = document.RootElement;
+            return new
+            {
+                id = game.GetProperty("id").GetInt32(),
+                name = game.GetProperty("name").GetString(),
+                slug = game.GetProperty("slug").GetString(),
+                background_image = game.GetProperty("background_image").GetString()
+            };
+        }).ToArray();
+
+        await ResponseWriter.SendAsync(
+            context.Response,
+            JsonSerializer.Serialize(new { results = games }),
+            HttpStatusCode.OK,
+            "application/json; charset=utf-8");
+    }
 }
