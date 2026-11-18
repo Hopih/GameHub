@@ -1,6 +1,9 @@
 using GameHub.Server;
 using GameHub.Server.Controllers;
 using GameHub.Server.Infrastructure;
+using GameHub.Server.Auth;
+using Microsoft.Extensions.Options;
+using System.Text;
 using System.Text.Json;
 
 var router = new Router();
@@ -8,6 +11,7 @@ var homeController = new HomeController();
 string? apiKey = Environment.GetEnvironmentVariable("RAWG_API_KEY");
 string? connectionString = Environment.GetEnvironmentVariable("GAMEHUB_CONNECTION_STRING");
 string settingsPath = Path.Combine(AppContext.BaseDirectory, "appsettings.Local.json");
+var jwtOptions = new JwtOptions();
 
 if (File.Exists(settingsPath))
 {
@@ -23,6 +27,9 @@ if (File.Exists(settingsPath))
     {
         connectionString = databaseConnectionString.GetString();
     }
+
+    if (settings.RootElement.TryGetProperty(JwtOptions.Section, out var jwtSettings))
+        jwtOptions = jwtSettings.Deserialize<JwtOptions>(JsonSerializerOptions.Web) ?? jwtOptions;
 }
 
 if (string.IsNullOrWhiteSpace(apiKey))
@@ -35,8 +42,21 @@ if (string.IsNullOrWhiteSpace(connectionString))
     throw new InvalidOperationException("Задайте GAMEHUB_CONNECTION_STRING или DatabaseConnectionString в appsettings.Local.json.");
 }
 
+var jwtKey = Environment.GetEnvironmentVariable("GAMEHUB_JWT_KEY");
+if (!string.IsNullOrWhiteSpace(jwtKey))
+    jwtOptions.Key = jwtKey;
+
+if (string.IsNullOrWhiteSpace(jwtOptions.Key) || Encoding.UTF8.GetByteCount(jwtOptions.Key) < 32)
+    throw new InvalidOperationException("Задайте ключ JWT длиной не менее 32 байт в GAMEHUB_JWT_KEY или Jwt.Key в appsettings.Local.json.");
+
+if (string.IsNullOrWhiteSpace(jwtOptions.Issuer) || string.IsNullOrWhiteSpace(jwtOptions.Audience) ||
+    jwtOptions.AccessTokenMinutes <= 0)
+    throw new InvalidOperationException("Проверьте Jwt.Issuer, Jwt.Audience и Jwt.AccessTokenMinutes.");
+
 await using var database = new Database(connectionString);
 var healthController = new HealthController(database);
+var tokenService = new TokenService(Options.Create(jwtOptions));
+var authorizeController = new AuthorizeController(database, tokenService);
 using var httpClient = new HttpClient();
 var rawgClient = new RawgClient(httpClient, apiKey);
 var gamesController = new GamesController(rawgClient);
@@ -45,6 +65,9 @@ router.Register("GET", "/health/db", healthController.CheckDatabaseAsync);
 router.Register("GET", "/", homeController.IndexAsync);
 router.Register("GET","/games", gamesController.GetAllAsync);
 router.Register("GET", "/games/featured", gamesController.GetFeaturedAsync);
+router.Register("POST", "/register", authorizeController.RegisterAsync);
+router.Register("POST", "/login", authorizeController.LoginAsync);
+router.Register("GET", "/auth/me", authorizeController.AuthAsync);
 
 var staticFiles = new StaticFileHandler(Path.Combine(AppContext.BaseDirectory, "wwwroot"));
 var server = new HttpServer(router, staticFiles);
