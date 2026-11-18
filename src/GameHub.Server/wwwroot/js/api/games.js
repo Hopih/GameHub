@@ -8,13 +8,18 @@ async function getGameList(url) {
         throw new Error("Unexpected games response");
     }
 
+    return data;
+}
+
+export async function getGames(page = 1) {
+    const data = await getGameList(`/games?page=${page}`);
+    if (!Number.isInteger(data.page) || data.page !== page || typeof data.hasNext !== "boolean") {
+        throw new Error("Unexpected pagination response");
+    }
+    return data;
+}
+
+export async function getFeaturedGames() {
+    const data = await getGameList("/games/featured");
     return data.results;
-}
-
-export function getGames() {
-    return getGameList("/games");
-}
-
-export function getFeaturedGames() {
-    return getGameList("/games/featured");
 }

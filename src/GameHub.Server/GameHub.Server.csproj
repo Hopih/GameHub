@@ -8,11 +8,12 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <None Update="wwwroot\**\*"
-          CopyToOutputDirectory="PreserveNewest" />
-    <None Update="appsettings.Local.json"
-          CopyToOutputDirectory="PreserveNewest"
-          CopyToPublishDirectory="Never" />
+    <None Update="wwwroot\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="appsettings.Local.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Never" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Npgsql" Version="10.0.3" />
   </ItemGroup>
 
 </Project>

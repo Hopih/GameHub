@@ -18,7 +18,7 @@ public class RawgClient
         _apiKey = apiKey;
     }
 
-    public async Task<string> GetGamesAsync(int page = 1, int pageSize = 20)
+    public async Task<string> GetGamesAsync(int page = 1, int pageSize = 40)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(page, 1);
         ArgumentOutOfRangeException.ThrowIfLessThan(pageSize, 1);

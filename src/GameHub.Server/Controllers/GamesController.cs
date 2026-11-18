@@ -15,11 +15,20 @@ public class GamesController
     
     public async Task GetAllAsync(HttpListenerContext context)
     {
-        string rawgJson = await _rawgClient.GetGamesAsync();
+        string pageParameter = context.Request.QueryString["page"] ?? "1";
+        if (!int.TryParse(pageParameter, out int page) || page < 1)
+        {
+            await ResponseWriter.SendAsync(context.Response, "Номер страницы должен быть положительным целым числом.", HttpStatusCode.BadRequest);
+            return;
+        }
+
+        string rawgJson = await _rawgClient.GetGamesAsync(page, 40);
         using var document = JsonDocument.Parse(rawgJson);
 
         var response = new
         {
+            page,
+            hasNext = document.RootElement.GetProperty("next").ValueKind == JsonValueKind.String,
             count = document.RootElement.GetProperty("count").GetInt32(),
             results = document.RootElement.GetProperty("results")
         };

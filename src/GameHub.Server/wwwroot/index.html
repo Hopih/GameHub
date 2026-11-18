@@ -106,7 +106,19 @@
                 </div>
                 <div id="empty-state" class="empty-state" hidden><svg class="icon" aria-hidden="true"><use href="#icon-search"/></svg><h3 id="empty-title">Ничего не нашлось</h3><p id="empty-description">Попробуй другое название или выбери другой жанр.</p><button class="button button-secondary" type="button" id="reset-filters">Сбросить фильтры</button></div>
                 <div id="load-error" class="load-error" hidden><h3>Не удалось загрузить игры</h3><p>Попробуй ещё раз — возможно, каталог временно недоступен.</p><button id="retry-load" class="button button-secondary" type="button">Попробовать снова<svg class="icon" aria-hidden="true"><use href="#icon-arrow"/></svg></button></div>
-                <div class="catalog-bottom"><span id="loaded-count">Ищем новые игровые миры</span><a class="text-link" href="#">Наверх ↑</a></div>
+                <div class="catalog-bottom">
+                    <span id="loaded-count">Ищем новые игровые миры</span>
+                    <nav id="catalog-pagination" class="pagination" aria-label="Страницы каталога">
+                        <button id="previous-page" class="pagination-button" type="button" aria-label="Предыдущая страница" disabled>
+                            <svg class="icon pagination-back" aria-hidden="true"><use href="#icon-chevron"/></svg>Назад
+                        </button>
+                        <span id="page-number" class="page-number" role="status" aria-live="polite">Страница 1</span>
+                        <button id="next-page" class="pagination-button" type="button" aria-label="Следующая страница" disabled>
+                            Далее<svg class="icon" aria-hidden="true"><use href="#icon-chevron"/></svg>
+                        </button>
+                    </nav>
+                    <a class="text-link" href="#">Наверх ↑</a>
+                </div>
             </section>
         </div>
     </main>

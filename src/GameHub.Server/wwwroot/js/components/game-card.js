@@ -47,6 +47,9 @@ export function createGameCard(game, selected = false) {
     favorite.dataset.gameName = game.name;
     favorite.append(createIcon("heart"));
     updateFavoriteButton(favorite, selected);
+    favorite.addEventListener("click", () => {
+        favorite.dispatchEvent(new CustomEvent("favorite-toggle", { bubbles: true, detail: game }));
+    });
     titleRow.append(title, favorite);
 
     const meta = document.createElement("p");

@@ -8,21 +8,25 @@ import { createNotifier } from "./ui/notification.js";
 const favorites = createFavorites();
 bindFavoriteControls(favorites, createNotifier());
 
-const catalog = createCatalog({ favorites, onViewChange: setActiveNav, onRetry: loadCatalog });
+const catalog = createCatalog({ favorites, onViewChange: setActiveNav, onPageChange: loadCatalog });
 const discovery = createDiscovery(favorites);
 initNavigation(catalog);
+let discoveryLoaded = false;
 
-async function loadCatalog() {
-    catalog.startLoading();
-    discovery.startLoading();
+async function loadCatalog(page = 1) {
+    if (!catalog.startLoading(page)) return;
+    if (!discoveryLoaded) discovery.startLoading();
     try {
-        const games = await getGames();
-        catalog.setGames(games);
-        discovery.setGames(games);
+        const data = await getGames(page);
+        catalog.setPage(data);
+        if (!discoveryLoaded) {
+            discovery.setGames(data.results);
+            discoveryLoaded = true;
+        }
     } catch (error) {
         console.error("Не удалось загрузить каталог:", error);
         catalog.showError();
-        discovery.showError();
+        if (!discoveryLoaded) discovery.showError();
     }
 }
 

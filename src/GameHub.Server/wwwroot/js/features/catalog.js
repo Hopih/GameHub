@@ -1,7 +1,16 @@
 import { renderGameCards } from "../components/game-card.js";
+import { createPagination } from "../components/pagination.js";
 
-export function createCatalog({ favorites, onViewChange, onRetry }) {
-    const state = { games: [], loaded: false, genre: "all", query: "", savedOnly: false, sort: "popular" };
+export function createCatalog({ favorites, onViewChange, onPageChange }) {
+    const state = {
+        games: [], loaded: false, loading: false,
+        page: 1, requestedPage: 1, hasNext: false,
+        genre: "all", query: "", savedOnly: false, sort: "popular"
+    };
+    const pagination = createPagination({
+        onPrevious: () => onPageChange(state.page - 1),
+        onNext: () => onPageChange(state.page + 1)
+    });
     const collator = new Intl.Collator("ru");
     const ui = {
         grid: document.getElementById("games"),
@@ -20,11 +29,11 @@ export function createCatalog({ favorites, onViewChange, onRetry }) {
     };
 
     function render() {
-        if (!state.loaded) return;
+        if (!state.loaded && !state.savedOnly) return;
 
-        const games = state.games.filter(game =>
+        const source = state.savedOnly ? favorites.getGames() : state.games;
+        const games = source.filter(game =>
             (state.genre === "all" || (game.genres || []).some(genre => genre.slug === state.genre)) &&
-            (!state.savedOnly || favorites.has(game.id)) &&
             game.name.toLocaleLowerCase("ru").includes(state.query)
         );
         if (state.sort === "rating") games.sort((a, b) => b.rating - a.rating);
@@ -32,12 +41,17 @@ export function createCatalog({ favorites, onViewChange, onRetry }) {
         if (state.sort === "newest") games.sort((a, b) => (Date.parse(b.released) || 0) - (Date.parse(a.released) || 0));
 
         renderGameCards(ui.grid, games, favorites);
+        ui.grid.setAttribute("aria-busy", String(state.loading && !state.savedOnly));
         ui.count.textContent = games.length;
         ui.title.textContent = state.savedOnly ? "Отмеченные игры" : "Каталог игр";
-        ui.status.textContent = state.query
-            ? `Результаты по запросу «${ui.search.value.trim()}» среди загруженных игр` : "";
-        ui.loadedCount.textContent = `Показано ${games.length} из ${state.games.length} загруженных игр`;
-        ui.empty.hidden = games.length > 0;
+        const scope = state.savedOnly ? "среди отмеченных игр" : `на странице ${state.page}`;
+        ui.status.textContent = state.loading && !state.savedOnly
+            ? `Загружаем страницу ${state.requestedPage}…`
+            : state.query ? `Результаты по запросу «${ui.search.value.trim()}» ${scope}` : "";
+        ui.loadedCount.textContent = state.savedOnly
+            ? `Показано ${games.length} из ${source.length} отмеченных игр`
+            : `Показано ${games.length} из ${source.length} игр страницы`;
+        ui.empty.hidden = games.length > 0 || state.loading;
         ui.emptyTitle.textContent = state.savedOnly ? "Пока нет подходящих отметок" : "Ничего не нашлось";
         ui.emptyDescription.textContent = state.savedOnly
             ? "Нажми на сердечко на карточке игры или сбрось фильтры. Отметки действуют до перезагрузки страницы."
@@ -53,6 +67,12 @@ export function createCatalog({ favorites, onViewChange, onRetry }) {
         });
         ui.favoriteFilter.classList.toggle("is-active", state.savedOnly);
         ui.favoriteFilter.setAttribute("aria-pressed", String(state.savedOnly));
+        pagination.render({
+            page: state.page,
+            hasNext: state.hasNext,
+            disabled: state.loading || !state.loaded,
+            hidden: state.savedOnly
+        });
     }
 
     function show(savedOnly = false) {
@@ -94,7 +114,7 @@ export function createCatalog({ favorites, onViewChange, onRetry }) {
         show();
         onViewChange("catalog");
     });
-    ui.retry.addEventListener("click", onRetry);
+    ui.retry.addEventListener("click", () => onPageChange(state.requestedPage));
     favorites.subscribe(() => { if (state.savedOnly) render(); });
 
     return {
@@ -105,30 +125,46 @@ export function createCatalog({ favorites, onViewChange, onRetry }) {
             updateFilters();
             render();
         },
-        startLoading() {
-            state.loaded = false;
+        startLoading(page) {
+            if (state.loading || !Number.isInteger(page) || page < 1) return false;
+            state.loading = true;
+            state.requestedPage = page;
             ui.retry.disabled = true;
             ui.error.hidden = true;
             ui.empty.hidden = true;
-            ui.status.textContent = "Загружаем игры из каталога…";
+            ui.status.textContent = `Загружаем страницу ${page}…`;
             ui.grid.setAttribute("aria-busy", "true");
+            updateFilters();
+            return true;
         },
-        setGames(games) {
-            state.games = games;
+        setPage(data) {
+            const pageChanged = state.loaded && state.page !== data.page;
+            state.games = data.results;
+            state.page = data.page;
+            state.hasNext = data.hasNext;
             state.loaded = true;
+            state.loading = false;
             ui.retry.disabled = false;
+            ui.error.hidden = true;
             render();
+            if (pageChanged && !state.savedOnly) document.getElementById("catalog").scrollIntoView();
         },
         showError() {
-            state.loaded = false;
-            ui.grid.replaceChildren();
+            state.loading = false;
+            if (state.loaded || state.savedOnly) {
+                render();
+                ui.status.textContent = `Не удалось загрузить страницу ${state.requestedPage}.`;
+            } else {
+                ui.grid.replaceChildren();
+                ui.status.textContent = "";
+                ui.count.textContent = "0";
+                ui.loadedCount.textContent = "Игры пока не загружены";
+            }
             ui.grid.setAttribute("aria-busy", "false");
-            ui.status.textContent = "";
-            ui.count.textContent = "0";
-            ui.loadedCount.textContent = "Игры пока не загружены";
             ui.empty.hidden = true;
             ui.error.hidden = false;
             ui.retry.disabled = false;
+            updateFilters();
         }
     };
 }

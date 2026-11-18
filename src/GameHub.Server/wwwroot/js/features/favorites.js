@@ -2,15 +2,16 @@ import { updateFavoriteButton } from "../components/game-card.js";
 
 export function createFavorites() {
     // Пока живёт в памяти страницы. Позже здесь появятся запросы к нашей БД через API.
-    const ids = new Set();
+    const games = new Map();
     const listeners = new Set();
 
     return {
-        has(id) { return ids.has(id); },
-        get count() { return ids.size; },
-        toggle(id) {
-            if (ids.has(id)) ids.delete(id);
-            else ids.add(id);
+        has(id) { return games.has(id); },
+        get count() { return games.size; },
+        getGames() { return [...games.values()]; },
+        toggle(game) {
+            if (games.has(game.id)) games.delete(game.id);
+            else games.set(game.id, game);
             listeners.forEach(listener => listener());
         },
         subscribe(listener) {
@@ -30,12 +31,9 @@ export function bindFavoriteControls(favorites, notify) {
         badge.hidden = favorites.count === 0;
     });
 
-    document.addEventListener("click", event => {
-        const button = event.target.closest("[data-favorite-id]");
-        if (!button) return;
-
-        const id = Number(button.dataset.favoriteId);
-        favorites.toggle(id);
-        notify(favorites.has(id) ? "Игра отмечена на этой странице" : "Отметка снята");
+    document.addEventListener("favorite-toggle", event => {
+        const game = event.detail;
+        favorites.toggle(game);
+        notify(favorites.has(game.id) ? "Игра отмечена" : "Отметка снята");
     });
 }

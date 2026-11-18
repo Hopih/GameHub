@@ -136,8 +136,12 @@
 
 .catalog-bottom {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    gap: 16px;
     padding: 25px 0 10px;
     color: #839086;
     font-size: 11px;
@@ -145,6 +149,51 @@
 
 .catalog-bottom .text-link {
     font-size: 11px;
+}
+
+.pagination {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.pagination-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    min-height: 40px;
+    padding: 8px 13px;
+    border: 1px solid #3c4937;
+    border-radius: 7px;
+    background: #242e23;
+    color: #d9e7cf;
+    font-size: 12px;
+}
+
+.pagination-button:hover:not(:disabled) {
+    border-color: var(--lime);
+    color: var(--lime);
+}
+
+.pagination-button:disabled {
+    opacity: .4;
+    cursor: default;
+}
+
+.pagination-button .icon {
+    width: 15px;
+    height: 15px;
+}
+
+.pagination-back {
+    transform: rotate(180deg);
+}
+
+.page-number {
+    color: #becab9;
+    font-size: 12px;
+    white-space: nowrap;
 }
 
 @media (max-width: 560px) {
@@ -207,6 +256,13 @@
 
     .catalog-bottom {
         font-size: 9px;
+    }
+
+    .pagination {
+        order: 3;
+        flex-basis: 100%;
+        justify-content: space-between;
+        gap: 8px;
     }
 
     .empty-state, .load-error {

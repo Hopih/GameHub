@@ -4,15 +4,25 @@ using GameHub.Server.Infrastructure;
 using System.Text.Json;
 
 var router = new Router();
-var healthController = new HealthController();
 var homeController = new HomeController();
 string? apiKey = Environment.GetEnvironmentVariable("RAWG_API_KEY");
+string? connectionString = Environment.GetEnvironmentVariable("GAMEHUB_CONNECTION_STRING");
 string settingsPath = Path.Combine(AppContext.BaseDirectory, "appsettings.Local.json");
 
-if (string.IsNullOrWhiteSpace(apiKey) && File.Exists(settingsPath))
+if (File.Exists(settingsPath))
 {
     using var settings = JsonDocument.Parse(await File.ReadAllTextAsync(settingsPath));
-    apiKey = settings.RootElement.GetProperty("RawgApiKey").GetString();
+    if (string.IsNullOrWhiteSpace(apiKey)
+        && settings.RootElement.TryGetProperty("RawgApiKey", out var rawgApiKey))
+    {
+        apiKey = rawgApiKey.GetString();
+    }
+
+    if (string.IsNullOrWhiteSpace(connectionString)
+        && settings.RootElement.TryGetProperty("DatabaseConnectionString", out var databaseConnectionString))
+    {
+        connectionString = databaseConnectionString.GetString();
+    }
 }
 
 if (string.IsNullOrWhiteSpace(apiKey))
@@ -20,10 +30,18 @@ if (string.IsNullOrWhiteSpace(apiKey))
     throw new InvalidOperationException("Задайте RAWG_API_KEY или RawgApiKey в appsettings.Local.json.");
 }
 
+if (string.IsNullOrWhiteSpace(connectionString))
+{
+    throw new InvalidOperationException("Задайте GAMEHUB_CONNECTION_STRING или DatabaseConnectionString в appsettings.Local.json.");
+}
+
+await using var database = new Database(connectionString);
+var healthController = new HealthController(database);
 using var httpClient = new HttpClient();
 var rawgClient = new RawgClient(httpClient, apiKey);
 var gamesController = new GamesController(rawgClient);
 router.Register("GET", "/health", healthController.CheckHealthAsync);
+router.Register("GET", "/health/db", healthController.CheckDatabaseAsync);
 router.Register("GET", "/", homeController.IndexAsync);
 router.Register("GET","/games", gamesController.GetAllAsync);
 router.Register("GET", "/games/featured", gamesController.GetFeaturedAsync);
