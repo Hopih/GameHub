@@ -19,13 +19,17 @@ export function createGameCard(game, selected = false) {
     setGameImage(image, game.background_image, game.name);
     cover.append(image);
 
-    if (Number(game.rating) > 0) {
-        const rating = document.createElement("span");
-        rating.className = "game-card__rating";
-        rating.setAttribute("aria-label", `Рейтинг RAWG: ${game.rating} из 5`);
-        rating.append(createIcon("star"), Number(game.rating).toFixed(1));
-        cover.append(rating);
+    const rating = document.createElement("span");
+    rating.className = "game-card__rating";
+    if (Number.isInteger(game.metacritic)) {
+        rating.textContent = `MC ${game.metacritic}`;
+        rating.setAttribute("aria-label", `Metacritic: ${game.metacritic} из 100`);
+    } else {
+        rating.textContent = "MC —";
+        rating.setAttribute("aria-label", "Оценка Metacritic отсутствует");
     }
+    rating.title = rating.getAttribute("aria-label");
+    cover.append(rating);
 
     const body = document.createElement("div");
     body.className = "game-card__body";

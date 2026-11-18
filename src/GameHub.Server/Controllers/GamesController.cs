@@ -22,12 +22,21 @@ public class GamesController
             return;
         }
 
-        string rawgJson = await _rawgClient.GetGamesAsync(page, 40);
+        string ordering = context.Request.QueryString["ordering"] ?? "-added";
+        string[] allowedOrderings = ["-added", "-released", "-metacritic", "name"];
+        if (!allowedOrderings.Contains(ordering))
+        {
+            await ResponseWriter.SendAsync(context.Response, "Неизвестная сортировка.", HttpStatusCode.BadRequest);
+            return;
+        }
+
+        string rawgJson = await _rawgClient.GetGamesAsync(page, 40, ordering);
         using var document = JsonDocument.Parse(rawgJson);
 
         var response = new
         {
             page,
+            ordering,
             hasNext = document.RootElement.GetProperty("next").ValueKind == JsonValueKind.String,
             count = document.RootElement.GetProperty("count").GetInt32(),
             results = document.RootElement.GetProperty("results")

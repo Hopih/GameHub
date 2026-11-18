@@ -5,16 +5,18 @@ export function createCatalog({ favorites, onViewChange, onPageChange }) {
     const state = {
         games: [], loaded: false, loading: false,
         page: 1, requestedPage: 1, hasNext: false,
-        genre: "all", query: "", savedOnly: false, sort: "popular"
+        genre: "all", query: "", savedOnly: false,
+        sort: "popular", requestedSort: "popular", librarySort: "popular"
     };
     const pagination = createPagination({
-        onPrevious: () => onPageChange(state.page - 1),
-        onNext: () => onPageChange(state.page + 1)
+        onPrevious: () => onPageChange(state.page - 1, state.sort),
+        onNext: () => onPageChange(state.page + 1, state.sort)
     });
     const collator = new Intl.Collator("ru");
     const ui = {
         grid: document.getElementById("games"),
         search: document.getElementById("game-search"),
+        sort: document.getElementById("game-sort"),
         title: document.getElementById("catalog-title"),
         count: document.getElementById("catalog-count"),
         status: document.getElementById("catalog-status"),
@@ -36,9 +38,13 @@ export function createCatalog({ favorites, onViewChange, onPageChange }) {
             (state.genre === "all" || (game.genres || []).some(genre => genre.slug === state.genre)) &&
             game.name.toLocaleLowerCase("ru").includes(state.query)
         );
-        if (state.sort === "rating") games.sort((a, b) => b.rating - a.rating);
-        if (state.sort === "name") games.sort((a, b) => collator.compare(a.name, b.name));
-        if (state.sort === "newest") games.sort((a, b) => (Date.parse(b.released) || 0) - (Date.parse(a.released) || 0));
+        // Каталог уже отсортирован RAWG. Локально сортируем только личные отметки.
+        if (state.savedOnly) {
+            if (state.librarySort === "popular") games.sort((a, b) => (b.added || 0) - (a.added || 0));
+            if (state.librarySort === "rating") games.sort((a, b) => (b.metacritic ?? -1) - (a.metacritic ?? -1));
+            if (state.librarySort === "name") games.sort((a, b) => collator.compare(a.name, b.name));
+            if (state.librarySort === "newest") games.sort((a, b) => (Date.parse(b.released) || 0) - (Date.parse(a.released) || 0));
+        }
 
         renderGameCards(ui.grid, games, favorites);
         ui.grid.setAttribute("aria-busy", String(state.loading && !state.savedOnly));
@@ -60,6 +66,8 @@ export function createCatalog({ favorites, onViewChange, onPageChange }) {
     }
 
     function updateFilters() {
+        ui.sort.disabled = state.loading;
+        ui.sort.value = state.savedOnly ? state.librarySort : state.loading ? state.requestedSort : state.sort;
         ui.genres.querySelectorAll("[data-genre]").forEach(button => {
             const active = button.dataset.genre === state.genre;
             button.classList.toggle("is-active", active);
@@ -93,9 +101,13 @@ export function createCatalog({ favorites, onViewChange, onPageChange }) {
         document.getElementById("catalog").scrollIntoView();
         onViewChange(state.savedOnly ? "library" : "catalog");
     });
-    document.getElementById("game-sort").addEventListener("change", event => {
-        state.sort = event.target.value;
-        render();
+    ui.sort.addEventListener("change", event => {
+        if (state.savedOnly) {
+            state.librarySort = event.target.value;
+            render();
+        } else {
+            onPageChange(1, event.target.value);
+        }
     });
     ui.genres.addEventListener("click", event => {
         const button = event.target.closest("[data-genre]");
@@ -114,7 +126,7 @@ export function createCatalog({ favorites, onViewChange, onPageChange }) {
         show();
         onViewChange("catalog");
     });
-    ui.retry.addEventListener("click", () => onPageChange(state.requestedPage));
+    ui.retry.addEventListener("click", () => onPageChange(state.requestedPage, state.requestedSort));
     favorites.subscribe(() => { if (state.savedOnly) render(); });
 
     return {
@@ -125,10 +137,11 @@ export function createCatalog({ favorites, onViewChange, onPageChange }) {
             updateFilters();
             render();
         },
-        startLoading(page) {
+        startLoading(page, sort = state.sort) {
             if (state.loading || !Number.isInteger(page) || page < 1) return false;
             state.loading = true;
             state.requestedPage = page;
+            state.requestedSort = sort;
             ui.retry.disabled = true;
             ui.error.hidden = true;
             ui.empty.hidden = true;
@@ -137,10 +150,11 @@ export function createCatalog({ favorites, onViewChange, onPageChange }) {
             updateFilters();
             return true;
         },
-        setPage(data) {
+        setPage(data, sort = state.requestedSort) {
             const pageChanged = state.loaded && state.page !== data.page;
             state.games = data.results;
             state.page = data.page;
+            state.sort = sort;
             state.hasNext = data.hasNext;
             state.loaded = true;
             state.loading = false;

@@ -13,12 +13,12 @@ const discovery = createDiscovery(favorites);
 initNavigation(catalog);
 let discoveryLoaded = false;
 
-async function loadCatalog(page = 1) {
-    if (!catalog.startLoading(page)) return;
+async function loadCatalog(page = 1, sort = "popular") {
+    if (!catalog.startLoading(page, sort)) return;
     if (!discoveryLoaded) discovery.startLoading();
     try {
-        const data = await getGames(page);
-        catalog.setPage(data);
+        const data = await getGames(page, sort);
+        catalog.setPage(data, sort);
         if (!discoveryLoaded) {
             discovery.setGames(data.results);
             discoveryLoaded = true;

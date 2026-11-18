@@ -11,9 +11,15 @@ async function getGameList(url) {
     return data;
 }
 
-export async function getGames(page = 1) {
-    const data = await getGameList(`/games?page=${page}`);
-    if (!Number.isInteger(data.page) || data.page !== page || typeof data.hasNext !== "boolean") {
+const orderings = { popular: "-added", newest: "-released", rating: "-metacritic", name: "name" };
+
+export async function getGames(page = 1, sort = "popular") {
+    const ordering = orderings[sort];
+    if (!ordering) throw new Error("Unknown game sort");
+    const parameters = new URLSearchParams({ page: String(page), ordering });
+    const data = await getGameList(`/games?${parameters}`);
+    if (!Number.isInteger(data.page) || data.page !== page || typeof data.hasNext !== "boolean"
+        || data.ordering !== ordering) {
         throw new Error("Unexpected pagination response");
     }
     return data;
