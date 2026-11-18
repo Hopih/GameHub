@@ -50,13 +50,14 @@ if (string.IsNullOrWhiteSpace(jwtOptions.Key) || Encoding.UTF8.GetByteCount(jwtO
     throw new InvalidOperationException("Задайте ключ JWT длиной не менее 32 байт в GAMEHUB_JWT_KEY или Jwt.Key в appsettings.Local.json.");
 
 if (string.IsNullOrWhiteSpace(jwtOptions.Issuer) || string.IsNullOrWhiteSpace(jwtOptions.Audience) ||
-    jwtOptions.AccessTokenMinutes <= 0)
-    throw new InvalidOperationException("Проверьте Jwt.Issuer, Jwt.Audience и Jwt.AccessTokenMinutes.");
+    jwtOptions.AccessTokenMinutes <= 0 || jwtOptions.RefreshTokenDays <= 0)
+    throw new InvalidOperationException("Проверьте издателя, получателя и сроки действия в разделе Jwt.");
 
 await using var database = new Database(connectionString);
 var healthController = new HealthController(database);
 var tokenService = new TokenService(Options.Create(jwtOptions));
 var authorizeController = new AuthorizeController(database, tokenService);
+var favoritesController = new FavoritesController(database);
 using var httpClient = new HttpClient();
 var rawgClient = new RawgClient(httpClient, apiKey);
 var gamesController = new GamesController(rawgClient);
@@ -67,7 +68,12 @@ router.Register("GET","/games", gamesController.GetAllAsync);
 router.Register("GET", "/games/featured", gamesController.GetFeaturedAsync);
 router.Register("POST", "/register", authorizeController.RegisterAsync);
 router.Register("POST", "/login", authorizeController.LoginAsync);
-router.Register("GET", "/auth/me", authorizeController.AuthAsync);
+router.Register("POST", "/auth/refresh", authorizeController.RefreshAsync);
+router.Register("POST", "/auth/logout", authorizeController.LogoutAsync);
+router.RegisterProtected("GET", "/auth/me", tokenService, authorizeController.AuthAsync);
+router.RegisterProtected("GET", "/favorites", tokenService, favoritesController.ListAsync);
+router.RegisterProtected("PUT", "/favorites", tokenService, favoritesController.SaveAsync);
+router.RegisterProtected("DELETE", "/favorites", tokenService, favoritesController.DeleteAsync);
 
 var staticFiles = new StaticFileHandler(Path.Combine(AppContext.BaseDirectory, "wwwroot"));
 var server = new HttpServer(router, staticFiles);

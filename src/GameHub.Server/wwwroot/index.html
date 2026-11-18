@@ -35,7 +35,10 @@
                 <input id="game-search" type="search" name="q" placeholder="Найти игру" aria-label="Найти среди загруженных игр" autocomplete="off">
                 <kbd aria-hidden="true">/</kbd>
             </form>
-            <span class="profile-badge" title="Гость" aria-label="Гость">G<span></span></span>
+            <div class="account-actions">
+                <button id="account-entry" class="account-entry" type="button">Войти</button>
+                <button id="account-logout" class="account-logout" type="button" hidden>Выйти</button>
+            </div>
         </div>
     </header>
 
@@ -101,6 +104,7 @@
                     <button id="favorite-filter" class="favorite-filter" type="button" aria-pressed="false"><svg class="icon" aria-hidden="true"><use href="#icon-heart"/></svg>Отмеченные</button>
                 </div>
                 <p id="catalog-status" class="section-note" role="status">Готовим что-нибудь интересное…</p>
+                <button id="retry-favorites" class="text-link" type="button" hidden>Повторить загрузку избранного</button>
                 <div id="games" class="game-grid catalog-grid" aria-busy="true">
                     <div class="skeleton-card"></div><div class="skeleton-card"></div><div class="skeleton-card"></div><div class="skeleton-card"></div>
                 </div>
@@ -124,6 +128,25 @@
     </main>
 
     <footer class="site-footer"><div class="footer-inner"><a class="brand footer-brand" href="#">Game<span>Hub</span></a><p>Твоя следующая любимая игра — где-то рядом.</p><a href="https://rawg.io/" target="_blank" rel="noopener noreferrer">Данные об играх — RAWG<svg class="icon" aria-hidden="true"><use href="#icon-arrow"/></svg></a></div></footer>
+    <dialog id="account-dialog" class="account-dialog" aria-labelledby="account-title">
+        <div class="account-dialog-header">
+            <h2 id="account-title">Вход в GameHub</h2>
+            <button id="account-close" type="button" aria-label="Закрыть">×</button>
+        </div>
+        <p id="account-error" class="account-error" role="alert"></p>
+        <form id="account-login" class="account-form" action="/login" method="post">
+            <label>Email<input type="email" name="email" autocomplete="username" maxlength="120" required></label>
+            <label>Пароль<input type="password" name="password" autocomplete="current-password" required></label>
+            <button class="button button-primary" type="submit">Войти</button>
+        </form>
+        <form id="account-register" class="account-form" action="/register" method="post" hidden>
+            <label>Ник<input type="text" name="nickname" autocomplete="nickname" maxlength="120" required></label>
+            <label>Email<input type="email" name="email" autocomplete="username" maxlength="120" required></label>
+            <label>Пароль<input type="password" name="password" autocomplete="new-password" required></label>
+            <button class="button button-primary" type="submit">Зарегистрироваться</button>
+        </form>
+        <button id="account-switch" class="text-link account-switch" type="button">Создать аккаунт</button>
+    </dialog>
     <div id="notification" class="notification" role="status" aria-live="polite"></div>
 </body>
 </html>

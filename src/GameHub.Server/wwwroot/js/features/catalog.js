@@ -24,8 +24,10 @@ export function createCatalog({ favorites, onViewChange, onPageChange }) {
         empty: document.getElementById("empty-state"),
         emptyTitle: document.getElementById("empty-title"),
         emptyDescription: document.getElementById("empty-description"),
+        reset: document.getElementById("reset-filters"),
         error: document.getElementById("load-error"),
         retry: document.getElementById("retry-load"),
+        retryFavorites: document.getElementById("retry-favorites"),
         favoriteFilter: document.getElementById("favorite-filter"),
         genres: document.querySelector(".genre-filters")
     };
@@ -34,6 +36,7 @@ export function createCatalog({ favorites, onViewChange, onPageChange }) {
         if (!state.loaded && !state.savedOnly) return;
 
         const source = state.savedOnly ? favorites.getGames() : state.games;
+        const libraryStatus = state.savedOnly ? favorites.status : null;
         const games = source.filter(game =>
             (state.genre === "all" || (game.genres || []).some(genre => genre.slug === state.genre)) &&
             game.name.toLocaleLowerCase("ru").includes(state.query)
@@ -47,21 +50,28 @@ export function createCatalog({ favorites, onViewChange, onPageChange }) {
         }
 
         renderGameCards(ui.grid, games, favorites);
-        ui.grid.setAttribute("aria-busy", String(state.loading && !state.savedOnly));
+        ui.grid.setAttribute("aria-busy", String(libraryStatus === "loading" || (state.loading && !state.savedOnly)));
         ui.count.textContent = games.length;
         ui.title.textContent = state.savedOnly ? "Отмеченные игры" : "Каталог игр";
         const scope = state.savedOnly ? "среди отмеченных игр" : `на странице ${state.page}`;
         ui.status.textContent = state.loading && !state.savedOnly
             ? `Загружаем страницу ${state.requestedPage}…`
             : state.query ? `Результаты по запросу «${ui.search.value.trim()}» ${scope}` : "";
+        if (libraryStatus === "loading") ui.status.textContent = "Загружаем избранное…";
+        if (libraryStatus === "error") ui.status.textContent = "Не удалось загрузить избранное.";
+        ui.retryFavorites.hidden = libraryStatus !== "error";
         ui.loadedCount.textContent = state.savedOnly
             ? `Показано ${games.length} из ${source.length} отмеченных игр`
             : `Показано ${games.length} из ${source.length} игр страницы`;
-        ui.empty.hidden = games.length > 0 || state.loading;
-        ui.emptyTitle.textContent = state.savedOnly ? "Пока нет подходящих отметок" : "Ничего не нашлось";
+        ui.empty.hidden = games.length > 0 || libraryStatus === "loading" || libraryStatus === "error" ||
+            (state.loading && !state.savedOnly);
+        ui.emptyTitle.textContent = libraryStatus === "guest" ? "Войди, чтобы увидеть избранное"
+            : state.savedOnly ? "Пока нет подходящих отметок" : "Ничего не нашлось";
         ui.emptyDescription.textContent = state.savedOnly
-            ? "Нажми на сердечко на карточке игры или сбрось фильтры. Отметки действуют до перезагрузки страницы."
+            ? libraryStatus === "guest" ? "Сохранённые игры привязаны к аккаунту."
+                : "Нажми на сердечко на карточке игры или сбрось фильтры."
             : "Попробуй другое название или выбери другой жанр.";
+        ui.reset.textContent = libraryStatus === "guest" ? "Открыть каталог" : "Сбросить фильтры";
         updateFilters();
     }
 
@@ -122,11 +132,12 @@ export function createCatalog({ favorites, onViewChange, onPageChange }) {
         updateFilters();
         render();
     });
-    document.getElementById("reset-filters").addEventListener("click", () => {
+    ui.reset.addEventListener("click", () => {
         show();
         onViewChange("catalog");
     });
     ui.retry.addEventListener("click", () => onPageChange(state.requestedPage, state.requestedSort));
+    ui.retryFavorites.addEventListener("click", () => favorites.load());
     favorites.subscribe(() => { if (state.savedOnly) render(); });
 
     return {

@@ -1,25 +1,27 @@
 ﻿using System.Net;
-using System.Net.Http.Headers;
 using System.Net.Mail;
+using System.Security.Claims;
 using System.Text.Json;
 using GameHub.Server.Auth;
 using GameHub.Server.Infrastructure;
 using GameHub.Server.Models;
-using Microsoft.IdentityModel.JsonWebTokens;
 using Npgsql;
 
 namespace GameHub.Server.Controllers;
 
 public class AuthorizeController
 {
+    private const string RefreshCookie = "gamehub_refresh";
     private readonly Database _database;
     private readonly PasswordHasher _passwordHasher = new();
     private readonly TokenService _tokenService;
+    private readonly RefreshSessions _sessions;
     
     public AuthorizeController(Database database, TokenService tokenService)
     {
         _database = database;
         _tokenService = tokenService;
+        _sessions = new RefreshSessions(database, tokenService);
     }
 
     public async Task RegisterAsync(HttpListenerContext context)
@@ -91,6 +93,9 @@ public class AuthorizeController
 
     public async Task LoginAsync(HttpListenerContext context)
     {
+        if (!await AllowSessionRequestAsync(context))
+            return;
+
         LoginRequest? request;
         try
         {
@@ -123,31 +128,43 @@ public class AuthorizeController
             return;
         }
 
-        var (accessToken, expiresAt) = _tokenService.CreateAccessToken(user);
-        context.Response.Headers.Set("Cache-Control", "no-store");
-        await ResponseWriter.SendAsync(
-            context.Response, JsonSerializer.Serialize(new { accessToken, expiresAt }, JsonSerializerOptions.Web),
-            HttpStatusCode.OK, "application/json; charset=utf-8");
+        var refresh = await _sessions.CreateAsync(user.Id);
+        await SendSessionAsync(context, user, refresh.Token, refresh.ExpiresAt);
     }
 
-    public async Task AuthAsync(HttpListenerContext context)
+    public async Task RefreshAsync(HttpListenerContext context)
     {
-        var authorization = context.Request.Headers["Authorization"];
-        var identity = AuthenticationHeaderValue.TryParse(authorization, out var header) &&
-                       header.Scheme.Equals("Bearer", StringComparison.OrdinalIgnoreCase) &&
-                       !string.IsNullOrWhiteSpace(header.Parameter)
-            ? await _tokenService.ValidateAccessTokenAsync(header.Parameter)
-            : null;
+        if (!await AllowSessionRequestAsync(context))
+            return;
 
-        if (identity is null ||
-            !Guid.TryParse(identity.FindFirst(JwtRegisteredClaimNames.Sub)?.Value, out var userId))
+        var token = ReadRefreshCookie(context.Request);
+        var session = token is null ? null : await _sessions.RotateAsync(token);
+        if (session is not { } refreshed)
         {
-            context.Response.Headers.Set("WWW-Authenticate", "Bearer");
             await ResponseWriter.SendAsync(
-                context.Response, "Требуется действительный токен", HttpStatusCode.Unauthorized);
+                context.Response, "Сессия закончилась. Войдите снова.", HttpStatusCode.Unauthorized);
             return;
         }
 
+        await SendSessionAsync(context, refreshed.User, refreshed.Token, refreshed.ExpiresAt);
+    }
+
+    public async Task LogoutAsync(HttpListenerContext context)
+    {
+        if (!await AllowSessionRequestAsync(context))
+            return;
+
+        var token = ReadRefreshCookie(context.Request);
+        if (token is not null)
+            await _sessions.RevokeAsync(token);
+
+        SetRefreshCookie(context, "", 0);
+        context.Response.StatusCode = (int)HttpStatusCode.NoContent;
+        context.Response.Close();
+    }
+
+    public async Task AuthAsync(HttpListenerContext context, Guid userId, ClaimsIdentity identity)
+    {
         var profile = new
         {
             id = userId,
@@ -155,10 +172,48 @@ public class AuthorizeController
             email = identity.FindFirst(AppClaims.Email)?.Value,
             role = identity.FindFirst(AppClaims.Role)?.Value
         };
-        context.Response.Headers.Set("Cache-Control", "no-store");
         await ResponseWriter.SendAsync(
             context.Response, JsonSerializer.Serialize(profile, JsonSerializerOptions.Web),
             HttpStatusCode.OK, "application/json; charset=utf-8");
+    }
+
+    private async Task SendSessionAsync(HttpListenerContext context, User user, string refreshToken, DateTime refreshExpiry)
+    {
+        var (accessToken, expiresAt) = _tokenService.CreateAccessToken(user);
+        var maxAge = Math.Max(0, (long)(refreshExpiry - DateTime.UtcNow).TotalSeconds);
+        SetRefreshCookie(context, refreshToken, maxAge);
+        await ResponseWriter.SendAsync(
+            context.Response, JsonSerializer.Serialize(new { accessToken, expiresAt }, JsonSerializerOptions.Web),
+            HttpStatusCode.OK, "application/json; charset=utf-8");
+    }
+
+    private static string? ReadRefreshCookie(HttpListenerRequest request)
+    {
+        var token = request.Cookies[RefreshCookie]?.Value;
+        return token?.Length == 86 ? token : null;
+    }
+
+    private static void SetRefreshCookie(HttpListenerContext context, string token, long maxAge)
+    {
+        var secure = context.Request.IsSecureConnection || context.Request.Url?.IsLoopback != true;
+        context.Response.Headers.Add("Set-Cookie",
+            $"{RefreshCookie}={token}; Path=/auth; Max-Age={maxAge}; HttpOnly; SameSite=Strict{(secure ? "; Secure" : "")}");
+    }
+
+    private static async Task<bool> AllowSessionRequestAsync(HttpListenerContext context)
+    {
+        context.Response.Headers.Set("Cache-Control", "no-store");
+        var origin = context.Request.Headers["Origin"];
+        var url = context.Request.Url;
+        if (origin is null ||
+            (Uri.TryCreate(origin, UriKind.Absolute, out var source) && url is not null &&
+             source.Authority.Equals(url.Authority, StringComparison.OrdinalIgnoreCase) &&
+             (source.Scheme == Uri.UriSchemeHttps || (!context.Request.IsSecureConnection && source.Scheme == Uri.UriSchemeHttp))))
+            return true;
+
+        await ResponseWriter.SendAsync(
+            context.Response, "Источник запроса не разрешён", HttpStatusCode.Forbidden);
+        return false;
     }
 
     private async Task<User?> FindUserByEmailAsync(string email)
