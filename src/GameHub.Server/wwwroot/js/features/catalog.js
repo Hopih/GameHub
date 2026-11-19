@@ -5,13 +5,14 @@ export function createCatalog({ favorites, onViewChange, onPageChange }) {
     const state = {
         games: [], loaded: false, loading: false, loadFailed: false,
         page: 1, requestedPage: 1, hasNext: false,
-        genre: "all", query: "", savedOnly: false,
+        genre: "all", query: "", libraryQuery: "", savedOnly: false,
         sort: "popular", requestedSort: "popular", librarySort: "popular"
     };
+    let searchTimer;
     const pagination = document.getElementById("catalog-pagination")
         ? createPagination({
-            onPrevious: () => onPageChange(state.page - 1, state.sort),
-            onNext: () => onPageChange(state.page + 1, state.sort)
+            onPrevious: () => onPageChange(state.page - 1, state.sort, state.query),
+            onNext: () => onPageChange(state.page + 1, state.sort, state.query)
         })
         : null;
     const collator = new Intl.Collator("ru");
@@ -43,7 +44,7 @@ export function createCatalog({ favorites, onViewChange, onPageChange }) {
         const libraryStatus = state.savedOnly ? favorites.status : null;
         const games = source.filter(game =>
             (state.genre === "all" || (game.genres || []).some(genre => genre.slug === state.genre)) &&
-            game.name.toLocaleLowerCase("ru").includes(state.query)
+            (!state.savedOnly || game.name.toLocaleLowerCase("ru").includes(state.libraryQuery))
         );
         // Каталог уже отсортирован RAWG. Локально сортируем только личные отметки.
         if (state.savedOnly) {
@@ -58,10 +59,10 @@ export function createCatalog({ favorites, onViewChange, onPageChange }) {
         ui.grid.setAttribute("aria-busy", String(libraryStatus === "loading" || catalogLoading));
         ui.count.textContent = games.length;
         ui.title.textContent = state.savedOnly ? "Отмеченные игры" : "Каталог игр";
-        const scope = state.savedOnly ? "среди отмеченных игр" : `на странице ${state.page}`;
+        const query = state.savedOnly ? ui.search.value.trim() : state.query;
         ui.status.textContent = catalogLoading
-            ? `Загружаем страницу ${state.requestedPage}…`
-            : state.query ? `Результаты по запросу «${ui.search.value.trim()}» ${scope}` : "";
+            ? query ? `Ищем игры по запросу «${query}»…` : `Загружаем страницу ${state.requestedPage}…`
+            : query ? `Результаты по запросу «${query}»${state.savedOnly ? " среди отмеченных игр" : ""}` : "";
         if (catalogError) ui.status.textContent = `Не удалось загрузить страницу ${state.requestedPage}.`;
         if (libraryStatus === "loading") ui.status.textContent = "Загружаем избранное…";
         if (libraryStatus === "error") ui.status.textContent = "Не удалось загрузить избранное.";
@@ -102,21 +103,32 @@ export function createCatalog({ favorites, onViewChange, onPageChange }) {
     }
 
     function show(savedOnly = false, genre = "all") {
+        clearTimeout(searchTimer);
         state.genre = genre;
-        state.query = "";
+        state.libraryQuery = "";
         state.savedOnly = savedOnly;
         ui.search.value = "";
-        render();
+        if (!savedOnly && state.query) search(true);
+        else render();
     }
 
-    function search() {
-        state.query = ui.search.value.trim().toLocaleLowerCase("ru");
-        render();
+    function search(immediate = false) {
+        clearTimeout(searchTimer);
+        const query = ui.search.value.trim();
+        if (state.savedOnly) {
+            state.libraryQuery = query.toLocaleLowerCase("ru");
+            render();
+        } else if (query !== state.query) {
+            const load = () => onPageChange(1, state.requestedSort, query);
+            if (immediate || !query) load();
+            else searchTimer = setTimeout(load, 300);
+        }
     }
 
-    ui.search.addEventListener("input", search);
+    ui.search.addEventListener("input", () => search());
     document.getElementById("search-form").addEventListener("submit", event => {
         event.preventDefault();
+        search(true);
         onViewChange(state.savedOnly ? "library" : "catalog");
     });
     ui.sort.addEventListener("change", event => {
@@ -124,7 +136,8 @@ export function createCatalog({ favorites, onViewChange, onPageChange }) {
             state.librarySort = event.target.value;
             render();
         } else {
-            onPageChange(1, event.target.value);
+            clearTimeout(searchTimer);
+            onPageChange(1, event.target.value, ui.search.value.trim());
         }
     });
     ui.genres.addEventListener("click", event => {
@@ -138,7 +151,7 @@ export function createCatalog({ favorites, onViewChange, onPageChange }) {
         show(stayInLibrary);
         onViewChange(stayInLibrary ? "library" : "catalog");
     });
-    ui.retry?.addEventListener("click", () => onPageChange(state.requestedPage, state.requestedSort));
+    ui.retry?.addEventListener("click", () => onPageChange(state.requestedPage, state.requestedSort, state.query));
     ui.retryFavorites?.addEventListener("click", () => favorites.load());
     ui.signIn?.addEventListener("click", () => document.getElementById("account-entry").click());
     favorites.subscribe(() => { if (state.savedOnly) render(); });
@@ -147,13 +160,20 @@ export function createCatalog({ favorites, onViewChange, onPageChange }) {
         show,
         setQuery(query) {
             ui.search.value = query;
-            search();
+            search(true);
         },
         showGenre(genre) {
             show(false, genre);
         },
-        startLoading(page, sort = state.sort) {
-            if (state.loading || !Number.isInteger(page) || page < 1) return false;
+        startLoading(page, sort = state.sort, query = state.query) {
+            if (!Number.isInteger(page) || page < 1 || (state.loading && query === state.query)) return false;
+            if (query !== state.query) {
+                state.query = query;
+                state.games = [];
+                state.page = 1;
+                state.hasNext = false;
+                state.loaded = false;
+            }
             state.loading = true;
             state.requestedPage = page;
             state.requestedSort = sort;

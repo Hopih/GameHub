@@ -1,4 +1,4 @@
-import { getGames, getFeaturedGames } from "./api/games.js";
+ import { getGames, getFeaturedGames } from "./api/games.js";
 import { createSession } from "./api/session.js";
 import { bindAccount } from "./features/account.js";
 import { createCatalog } from "./features/catalog.js";
@@ -28,6 +28,7 @@ void session.restore().catch(error => notify(error.message));
 function initCatalog(isLibrary) {
     const discovery = isLibrary ? null : createDiscovery(favorites);
     let previewLoaded = false;
+    let latestRequest = 0;
     const catalog = createCatalog({
         favorites,
         onViewChange(view) {
@@ -43,25 +44,36 @@ function initCatalog(isLibrary) {
         return;
     }
 
-    const query = new URLSearchParams(location.search).get("q");
-    if (query) catalog.setQuery(query);
+    const query = new URLSearchParams(location.search).get("q")?.trim();
+    if (query) {
+        catalog.setQuery(query);
+        void getGames().then(setPreview).catch(() => {
+            if (!previewLoaded) discovery.showError();
+        });
+    } else {
+        void loadCatalog();
+    }
     document.getElementById("retry-spotlights").addEventListener("click", loadSpotlights);
-    void loadCatalog();
     void loadSpotlights();
 
-    async function loadCatalog(page = 1, sort = "popular") {
-        if (!catalog.startLoading(page, sort)) return;
+    function setPreview(data) {
+        if (previewLoaded) return;
+        discovery.setGames(data.results);
+        previewLoaded = true;
+    }
+
+    async function loadCatalog(page = 1, sort = "popular", query = "") {
+        if (!catalog.startLoading(page, sort, query)) return;
+        const request = ++latestRequest;
+        const includesPreview = !query && page === 1 && sort === "popular";
         try {
-            const data = await getGames(page, sort);
-            catalog.setPage(data, sort);
-            if (!previewLoaded) {
-                discovery.setGames(data.results);
-                previewLoaded = true;
-            }
+            const data = await getGames(page, sort, query);
+            if (request === latestRequest) catalog.setPage(data, sort);
+            if (includesPreview) setPreview(data);
         } catch (error) {
             console.error("Не удалось загрузить каталог:", error);
-            catalog.showError();
-            if (!previewLoaded) discovery.showError();
+            if (request === latestRequest) catalog.showError();
+            if (includesPreview && !previewLoaded) discovery.showError();
         }
     }
 

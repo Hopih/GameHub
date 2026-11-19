@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { getGames } from "../src/GameHub.Server/wwwroot/js/api/games.js";
 import { createCatalog } from "../src/GameHub.Server/wwwroot/js/features/catalog.js";
 
 function setup(t) {
@@ -19,8 +20,13 @@ function setup(t) {
     t.after(() => { delete globalThis.document; });
     const favorites = { getGames: () => [], status: "ready", subscribe() {} };
     const views = [];
-    const catalog = createCatalog({ favorites, onViewChange: view => views.push(view) });
-    return { catalog, element, favorites, views };
+    const requests = [];
+    const catalog = createCatalog({
+        favorites,
+        onViewChange: view => views.push(view),
+        onPageChange: (...request) => requests.push(request)
+    });
+    return { catalog, element, favorites, views, requests };
 }
 
 test("catalog failure stays in the catalog across navigation and retry", t => {
@@ -44,7 +50,7 @@ test("catalog failure stays in the catalog across navigation and retry", t => {
 });
 
 test("reset keeps a signed-in player in the library and sends a guest to the catalog", t => {
-    const { catalog, element, favorites, views } = setup(t);
+    const { catalog, element, favorites, views, requests } = setup(t);
     catalog.show(true);
     const search = element("game-search");
     search.value = "нет совпадений";
@@ -59,4 +65,52 @@ test("reset keeps a signed-in player in the library and sends a guest to the cat
     element("reset-filters").dispatchEvent(new Event("click"));
     assert.equal(views.at(-1), "catalog");
     assert.equal(element("catalog-title").textContent, "Каталог игр");
+    assert.deepEqual(requests, []);
+});
+
+test("catalog search starts on page one and keeps the query for pagination and retry", t => {
+    const { catalog, element, requests } = setup(t);
+    catalog.startLoading(2, "rating");
+
+    const search = element("game-search");
+    search.value = "  Asterix & Obelix  ";
+    search.dispatchEvent(new Event("input"));
+    assert.deepEqual(requests, []);
+    element("search-form").dispatchEvent(new Event("submit"));
+    assert.deepEqual(requests, [[1, "rating", "Asterix & Obelix"]]);
+    assert.equal(catalog.startLoading(...requests.at(-1)), true);
+    catalog.setPage({ page: 1, results: [], hasNext: true });
+
+    element("next-page").dispatchEvent(new Event("click"));
+    assert.deepEqual(requests.at(-1), [2, "rating", "Asterix & Obelix"]);
+    catalog.startLoading(...requests.at(-1));
+    catalog.showError();
+    element("retry-load").dispatchEvent(new Event("click"));
+    assert.deepEqual(requests.at(-1), [2, "rating", "Asterix & Obelix"]);
+
+    search.value = "";
+    search.dispatchEvent(new Event("input"));
+    assert.deepEqual(requests.at(-1), [1, "rating", ""]);
+});
+
+test("games API sends the complete search query and leaves it out when empty", async t => {
+    const fetch = t.mock.method(globalThis, "fetch", async url => {
+        const { searchParams } = new URL(url, "http://localhost");
+        return Response.json({
+            page: Number(searchParams.get("page")),
+            ordering: searchParams.get("ordering"),
+            hasNext: false,
+            results: []
+        });
+    });
+    const query = "Герои & Магия + #2";
+    await getGames(2, "rating", query);
+    await getGames();
+
+    const [searchRequest, catalogRequest] = fetch.mock.calls.map(({ arguments: [url] }) =>
+        new URL(url, "http://localhost").searchParams);
+    assert.equal(searchRequest.get("search"), query);
+    assert.equal(searchRequest.get("page"), "2");
+    assert.equal(searchRequest.get("ordering"), "-metacritic");
+    assert.equal(catalogRequest.has("search"), false);
 });

@@ -13,10 +13,11 @@ async function getGameList(url) {
 
 const orderings = { popular: "-added", newest: "-released", rating: "-metacritic", name: "name" };
 
-export async function getGames(page = 1, sort = "popular") {
+export async function getGames(page = 1, sort = "popular", query = "") {
     const ordering = orderings[sort];
     if (!ordering) throw new Error("Unknown game sort");
     const parameters = new URLSearchParams({ page: String(page), ordering });
+    if (query) parameters.set("search", query);
     const data = await getGameList(`/games?${parameters}`);
     if (!Number.isInteger(data.page) || data.page !== page || typeof data.hasNext !== "boolean"
         || data.ordering !== ordering) {

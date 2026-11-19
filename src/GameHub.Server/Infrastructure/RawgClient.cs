@@ -18,12 +18,17 @@ public class RawgClient
         _apiKey = apiKey;
     }
 
-    public async Task<string> GetGamesAsync(int page = 1, int pageSize = 40, string ordering = "-added")
+    public async Task<string> GetGamesAsync(int page = 1, int pageSize = 40, string ordering = "-added", string? search = null)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(page, 1);
         ArgumentOutOfRangeException.ThrowIfLessThan(pageSize, 1);
 
         string requestUrl = $"https://api.rawg.io/api/games?key={Uri.EscapeDataString(_apiKey)}&page={page}&page_size={pageSize}&ordering={Uri.EscapeDataString(ordering)}";
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            requestUrl += $"&search={Uri.EscapeDataString(search)}";
+        }
+
 
         if (ordering == "-released")
         {

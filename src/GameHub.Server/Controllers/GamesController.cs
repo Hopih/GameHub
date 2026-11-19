@@ -30,7 +30,8 @@ public class GamesController
             return;
         }
 
-        string rawgJson = await _rawgClient.GetGamesAsync(page, 40, ordering);
+        string? search = context.Request.QueryString["search"]?.Trim();
+        string rawgJson = await _rawgClient.GetGamesAsync(page, 40, ordering, search);
         using var document = JsonDocument.Parse(rawgJson);
 
         var response = new
