@@ -101,7 +101,7 @@
     height: 15px;
 }
 
-.favorite-filter.is-active {
+.favorite-filter:hover {
     color: var(--lime);
 }
 

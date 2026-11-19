@@ -10,6 +10,7 @@ var router = new Router();
 var homeController = new HomeController();
 string? apiKey = Environment.GetEnvironmentVariable("RAWG_API_KEY");
 string? connectionString = Environment.GetEnvironmentVariable("GAMEHUB_CONNECTION_STRING");
+string? localHttpPrefix = null;
 string settingsPath = Path.Combine(AppContext.BaseDirectory, "appsettings.Local.json");
 var jwtOptions = new JwtOptions();
 
@@ -30,6 +31,9 @@ if (File.Exists(settingsPath))
 
     if (settings.RootElement.TryGetProperty(JwtOptions.Section, out var jwtSettings))
         jwtOptions = jwtSettings.Deserialize<JwtOptions>(JsonSerializerOptions.Web) ?? jwtOptions;
+
+    if (settings.RootElement.TryGetProperty("HttpPrefix", out var httpPrefix))
+        localHttpPrefix = httpPrefix.GetString();
 }
 
 if (string.IsNullOrWhiteSpace(apiKey))
@@ -65,6 +69,8 @@ var gamesController = new GamesController(rawgClient);
 router.Register("GET", "/health", healthController.CheckHealthAsync);
 router.Register("GET", "/health/db", healthController.CheckDatabaseAsync);
 router.Register("GET", "/", homeController.IndexAsync);
+router.Register("GET", "/library", homeController.LibraryAsync);
+router.Register("GET", "/recommendations", homeController.RecommendationsAsync);
 router.Register("GET","/games", gamesController.GetAllAsync);
 router.Register("GET", "/games/featured", gamesController.GetFeaturedAsync);
 router.Register("POST", "/register", authorizeController.RegisterAsync);
@@ -78,7 +84,7 @@ router.RegisterProtected("DELETE", "/favorites", tokenService, favoritesControll
 
 var staticFiles = new StaticFileHandler(Path.Combine(AppContext.BaseDirectory, "wwwroot"));
 var server = new HttpServer(router, staticFiles);
-string prefix = args.Length > 0 ? args[0] : "http://localhost:8080/";
+string prefix = args.Length > 0 ? args[0] : localHttpPrefix ?? "http://localhost:8080/";
 using var cleanupCancellation = new CancellationTokenSource();
 var cleanup = sessions.RunCleanupAsync(cleanupCancellation.Token);
 try

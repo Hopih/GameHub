@@ -8,10 +8,12 @@ export function createCatalog({ favorites, onViewChange, onPageChange }) {
         genre: "all", query: "", savedOnly: false,
         sort: "popular", requestedSort: "popular", librarySort: "popular"
     };
-    const pagination = createPagination({
-        onPrevious: () => onPageChange(state.page - 1, state.sort),
-        onNext: () => onPageChange(state.page + 1, state.sort)
-    });
+    const pagination = document.getElementById("catalog-pagination")
+        ? createPagination({
+            onPrevious: () => onPageChange(state.page - 1, state.sort),
+            onNext: () => onPageChange(state.page + 1, state.sort)
+        })
+        : null;
     const collator = new Intl.Collator("ru");
     const ui = {
         grid: document.getElementById("games"),
@@ -25,10 +27,10 @@ export function createCatalog({ favorites, onViewChange, onPageChange }) {
         emptyTitle: document.getElementById("empty-title"),
         emptyDescription: document.getElementById("empty-description"),
         reset: document.getElementById("reset-filters"),
+        signIn: document.getElementById("library-sign-in"),
         error: document.getElementById("load-error"),
         retry: document.getElementById("retry-load"),
         retryFavorites: document.getElementById("retry-favorites"),
-        favoriteFilter: document.getElementById("favorite-filter"),
         genres: document.querySelector(".genre-filters")
     };
 
@@ -63,9 +65,9 @@ export function createCatalog({ favorites, onViewChange, onPageChange }) {
         if (catalogError) ui.status.textContent = `Не удалось загрузить страницу ${state.requestedPage}.`;
         if (libraryStatus === "loading") ui.status.textContent = "Загружаем избранное…";
         if (libraryStatus === "error") ui.status.textContent = "Не удалось загрузить избранное.";
-        ui.retryFavorites.hidden = libraryStatus !== "error";
-        ui.error.hidden = !catalogError;
-        ui.retry.disabled = !catalogError;
+        if (ui.retryFavorites) ui.retryFavorites.hidden = libraryStatus !== "error";
+        if (ui.error) ui.error.hidden = !catalogError;
+        if (ui.retry) ui.retry.disabled = !catalogError;
         ui.loadedCount.textContent = state.savedOnly
             ? `Показано ${games.length} из ${source.length} отмеченных игр`
             : `Показано ${games.length} из ${source.length} игр страницы`;
@@ -79,6 +81,7 @@ export function createCatalog({ favorites, onViewChange, onPageChange }) {
                 : "Нажми на сердечко на карточке игры или сбрось фильтры."
             : "Попробуй другое название или выбери другой жанр.";
         ui.reset.textContent = libraryStatus === "guest" ? "Открыть каталог" : "Сбросить фильтры";
+        if (ui.signIn) ui.signIn.hidden = libraryStatus !== "guest";
         updateFilters();
     }
 
@@ -90,9 +93,7 @@ export function createCatalog({ favorites, onViewChange, onPageChange }) {
             button.classList.toggle("is-active", active);
             button.setAttribute("aria-pressed", String(active));
         });
-        ui.favoriteFilter.classList.toggle("is-active", state.savedOnly);
-        ui.favoriteFilter.setAttribute("aria-pressed", String(state.savedOnly));
-        pagination.render({
+        pagination?.render({
             page: state.page,
             hasNext: state.hasNext,
             disabled: state.loading || !state.loaded,
@@ -108,13 +109,14 @@ export function createCatalog({ favorites, onViewChange, onPageChange }) {
         render();
     }
 
-    ui.search.addEventListener("input", () => {
+    function search() {
         state.query = ui.search.value.trim().toLocaleLowerCase("ru");
         render();
-    });
+    }
+
+    ui.search.addEventListener("input", search);
     document.getElementById("search-form").addEventListener("submit", event => {
         event.preventDefault();
-        document.getElementById("catalog").scrollIntoView();
         onViewChange(state.savedOnly ? "library" : "catalog");
     });
     ui.sort.addEventListener("change", event => {
@@ -131,22 +133,22 @@ export function createCatalog({ favorites, onViewChange, onPageChange }) {
         state.genre = button.dataset.genre;
         render();
     });
-    ui.favoriteFilter.addEventListener("click", () => {
-        state.savedOnly = !state.savedOnly;
-        onViewChange(state.savedOnly ? "library" : "catalog");
-        render();
-    });
     ui.reset.addEventListener("click", () => {
         const stayInLibrary = state.savedOnly && favorites.status !== "guest";
         show(stayInLibrary);
         onViewChange(stayInLibrary ? "library" : "catalog");
     });
-    ui.retry.addEventListener("click", () => onPageChange(state.requestedPage, state.requestedSort));
-    ui.retryFavorites.addEventListener("click", () => favorites.load());
+    ui.retry?.addEventListener("click", () => onPageChange(state.requestedPage, state.requestedSort));
+    ui.retryFavorites?.addEventListener("click", () => favorites.load());
+    ui.signIn?.addEventListener("click", () => document.getElementById("account-entry").click());
     favorites.subscribe(() => { if (state.savedOnly) render(); });
 
     return {
         show,
+        setQuery(query) {
+            ui.search.value = query;
+            search();
+        },
         showGenre(genre) {
             show(false, genre);
         },

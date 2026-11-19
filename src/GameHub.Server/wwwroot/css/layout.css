@@ -140,6 +140,20 @@
     margin-top: 7px;
 }
 
+main[data-current-page="library"],
+main[data-current-page="recommendations"] {
+    min-height: 65vh;
+    display: flow-root;
+}
+
+.standalone-page h1,
+main[data-current-page="library"] #catalog-title {
+    margin: 0;
+    font-size: clamp(25px, 4vw, 42px);
+    line-height: 1.15;
+    letter-spacing: -.035em;
+}
+
 .section-heading {
     display: flex;
     align-items: center;

@@ -2,6 +2,57 @@ import { renderGameCards } from "../components/game-card.js";
 import { setGameImage } from "../shared/dom.js";
 import { gameUrl } from "../shared/game-info.js";
 
+export function createRecommendations(favorites) {
+    const grid = document.getElementById("recommended-games");
+    const status = document.getElementById("recommended-status");
+    const retry = document.getElementById("retry-recommendations");
+    let popularGames = null;
+
+    function renderRecommendations() {
+        if (!popularGames) return;
+
+        const genreWeights = new Map();
+        for (const game of favorites.getGames()) {
+            for (const genre of game.genres ?? []) {
+                genreWeights.set(genre.slug, (genreWeights.get(genre.slug) ?? 0) + 1);
+            }
+        }
+
+        const ranked = popularGames
+            .filter(game => !favorites.has(game.id))
+            .map(game => ({
+                game,
+                score: (game.genres ?? []).reduce((sum, genre) => sum + (genreWeights.get(genre.slug) ?? 0), 0)
+            }))
+            .sort((a, b) => b.score - a.score)
+            .slice(0, 12);
+
+        renderGameCards(grid, ranked.map(({ game }) => game), favorites);
+        if (!ranked.length) status.textContent = "Новых игр в этой подборке пока нет. Загляни в каталог.";
+        else if (ranked[0].score > 0) status.textContent = "Сначала — игры в жанрах из твоего избранного.";
+        else status.textContent = "Популярные игры из каталога.";
+    }
+
+    favorites.subscribe(renderRecommendations);
+
+    return {
+        startLoading() {
+            status.textContent = "Загружаем игры из каталога…";
+            grid.setAttribute("aria-busy", "true");
+            retry.hidden = true;
+        },
+        setGames(games) {
+            popularGames = games;
+            renderRecommendations();
+        },
+        showError() {
+            grid.setAttribute("aria-busy", "false");
+            status.textContent = "Не удалось загрузить рекомендации.";
+            retry.hidden = false;
+        }
+    };
+}
+
 export function createDiscovery(favorites) {
     const grid = document.getElementById("featured-games");
     const status = document.getElementById("featured-status");
@@ -9,10 +60,6 @@ export function createDiscovery(favorites) {
     const spotlightRetry = document.getElementById("retry-spotlights");
 
     return {
-        startLoading() {
-            status.textContent = "Загружаем игры из каталога…";
-            grid.setAttribute("aria-busy", "true");
-        },
         setGames(games) {
             renderGameCards(grid, games.slice(0, 4), favorites);
             status.textContent = "Популярные игры из каталога. Твоя следующая любимая может быть среди них.";
@@ -20,7 +67,7 @@ export function createDiscovery(favorites) {
         showError() {
             grid.replaceChildren();
             grid.setAttribute("aria-busy", "false");
-            status.textContent = "Каталог пока недоступен. Попробуй загрузить его ещё раз ниже.";
+            status.textContent = "Не удалось загрузить рекомендации.";
         },
         startSpotlightLoading() {
             spotlightStatus.textContent = "Загружаем обложки из RAWG…";
