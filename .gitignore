@@ -12,6 +12,7 @@ TestResults/
 .env.*
 !.env.example
 appsettings.Local.json
+appsettingsLocal.json
 appsettings.*.Local.json
 secrets.json
 

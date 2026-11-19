@@ -56,7 +56,8 @@ if (string.IsNullOrWhiteSpace(jwtOptions.Issuer) || string.IsNullOrWhiteSpace(jw
 await using var database = new Database(connectionString);
 var healthController = new HealthController(database);
 var tokenService = new TokenService(Options.Create(jwtOptions));
-var authorizeController = new AuthorizeController(database, tokenService);
+var sessions = new RefreshSessions(database, tokenService);
+var authorizeController = new AuthorizeController(database, tokenService, sessions);
 var favoritesController = new FavoritesController(database);
 using var httpClient = new HttpClient();
 var rawgClient = new RawgClient(httpClient, apiKey);
@@ -78,4 +79,14 @@ router.RegisterProtected("DELETE", "/favorites", tokenService, favoritesControll
 var staticFiles = new StaticFileHandler(Path.Combine(AppContext.BaseDirectory, "wwwroot"));
 var server = new HttpServer(router, staticFiles);
 string prefix = args.Length > 0 ? args[0] : "http://localhost:8080/";
-await server.RunAsync(prefix);
+using var cleanupCancellation = new CancellationTokenSource();
+var cleanup = sessions.RunCleanupAsync(cleanupCancellation.Token);
+try
+{
+    await server.RunAsync(prefix);
+}
+finally
+{
+    cleanupCancellation.Cancel();
+    await cleanup;
+}

@@ -12,9 +12,9 @@ public class Database : IAsyncDisposable
         _dataSource = NpgsqlDataSource.Create(connectionString);
     }
 
-    public async Task<NpgsqlConnection> OpenConnectionAsync()
+    public async Task<NpgsqlConnection> OpenConnectionAsync(CancellationToken cancellationToken = default)
     {
-        return await _dataSource.OpenConnectionAsync();
+        return await _dataSource.OpenConnectionAsync(cancellationToken);
     }
 
     public async Task<bool> CheckConnectionAsync()

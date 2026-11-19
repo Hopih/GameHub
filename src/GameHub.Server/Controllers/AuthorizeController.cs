@@ -12,36 +12,28 @@ namespace GameHub.Server.Controllers;
 public class AuthorizeController
 {
     private const string RefreshCookie = "gamehub_refresh";
+    private const int MaxRequestBytes = 16 * 1024;
     private readonly Database _database;
     private readonly PasswordHasher _passwordHasher = new();
     private readonly TokenService _tokenService;
     private readonly RefreshSessions _sessions;
     
-    public AuthorizeController(Database database, TokenService tokenService)
+    public AuthorizeController(Database database, TokenService tokenService, RefreshSessions sessions)
     {
         _database = database;
         _tokenService = tokenService;
-        _sessions = new RefreshSessions(database, tokenService);
+        _sessions = sessions;
     }
 
     public async Task RegisterAsync(HttpListenerContext context)
     {
-        RegisterRequest? request;
-        try
-        {
-            request = await JsonSerializer.DeserializeAsync<RegisterRequest>(
-                context.Request.InputStream, JsonSerializerOptions.Web);
-        }
-        catch (JsonException)
-        {
-            await ResponseWriter.SendAsync(
-                context.Response, "Некорректный JSON", HttpStatusCode.BadRequest);
+        var request = await ReadRequestAsync<RegisterRequest>(context);
+        if (request is null)
             return;
-        }
 
-        var nickname = request?.Nickname?.Trim();
-        var email = request?.Email?.Trim();
-        var password = request?.Password;
+        var nickname = request.Nickname?.Trim();
+        var email = request.Email?.Trim();
+        var password = request.Password;
         if (string.IsNullOrWhiteSpace(nickname) || nickname.Length > 120 ||
             string.IsNullOrWhiteSpace(email) || email.Length > 120 ||
             !MailAddress.TryCreate(email, out var address) || address.Address != email ||
@@ -96,20 +88,11 @@ public class AuthorizeController
         if (!await AllowSessionRequestAsync(context))
             return;
 
-        LoginRequest? request;
-        try
-        {
-            request = await JsonSerializer.DeserializeAsync<LoginRequest>(
-                context.Request.InputStream, JsonSerializerOptions.Web);
-        }
-        catch (JsonException)
-        {
-            await ResponseWriter.SendAsync(
-                context.Response, "Некорректный JSON", HttpStatusCode.BadRequest);
+        var request = await ReadRequestAsync<LoginRequest>(context);
+        if (request is null)
             return;
-        }
-        var email = request?.Email?.Trim();
-        var password = request?.Password;
+        var email = request.Email?.Trim();
+        var password = request.Password;
         if (string.IsNullOrWhiteSpace(email) || email.Length > 120 || string.IsNullOrWhiteSpace(password))
         {
             await ResponseWriter.SendAsync(
@@ -239,6 +222,35 @@ public class AuthorizeController
             Role = reader.GetString(4),
             CreatedAt = reader.GetFieldValue<DateTimeOffset>(5)
         };
+    }
+
+    private static async Task<T?> ReadRequestAsync<T>(HttpListenerContext context) where T : class
+    {
+        if (context.Request.ContentLength64 <= MaxRequestBytes)
+        {
+            var buffer = new byte[MaxRequestBytes + 1];
+            var length = await context.Request.InputStream.ReadAtLeastAsync(buffer, buffer.Length, false);
+            if (length <= MaxRequestBytes)
+            {
+                try
+                {
+                    using var body = new MemoryStream(buffer, 0, length, writable: false);
+                    var request = JsonSerializer.Deserialize<T>(body, JsonSerializerOptions.Web);
+                    if (request is not null) return request;
+                }
+                catch (JsonException)
+                {
+                    // Пустое тело, JSON null и ошибки разбора дают один ответ.
+                }
+
+                await ResponseWriter.SendAsync(context.Response, "Некорректный JSON", HttpStatusCode.BadRequest);
+                return null;
+            }
+        }
+
+        await ResponseWriter.SendAsync(context.Response, "Тело запроса превышает 16 КиБ",
+            HttpStatusCode.RequestEntityTooLarge);
+        return null;
     }
 
     private sealed record RegisterRequest(string? Nickname, string? Email, string? Password);

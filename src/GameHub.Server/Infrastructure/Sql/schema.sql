@@ -26,6 +26,8 @@ CREATE TABLE IF NOT EXISTS public.refresh_tokens (
 
 CREATE INDEX IF NOT EXISTS ix_refresh_tokens_user   ON public.refresh_tokens (user_id);
 CREATE INDEX IF NOT EXISTS ix_refresh_tokens_family ON public.refresh_tokens (family_id);
+CREATE INDEX IF NOT EXISTS ix_refresh_tokens_expiry ON public.refresh_tokens (expires_at);
+CREATE INDEX IF NOT EXISTS ix_refresh_tokens_replacement ON public.refresh_tokens (replaced_by) WHERE replaced_by IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS public.user_favorites (
     user_id uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,

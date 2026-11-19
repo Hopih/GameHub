@@ -6,6 +6,30 @@ namespace GameHub.Server.Auth;
 
 public sealed class RefreshSessions(Database database, TokenService tokens)
 {
+    public async Task RunCleanupAsync(CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromHours(1));
+        try
+        {
+            do
+            {
+                try
+                {
+                    await using var connection = await database.OpenConnectionAsync(cancellationToken);
+                    await using var command = new NpgsqlCommand("""
+                        DELETE FROM public.refresh_tokens WHERE expires_at <= statement_timestamp();
+                        """, connection);
+                    await command.ExecuteNonQueryAsync(cancellationToken);
+                }
+                catch (Exception exception) when (exception is NpgsqlException or TimeoutException)
+                {
+                    Console.Error.WriteLine($"Не удалось удалить истёкшие refresh-токены: {exception.Message}");
+                }
+            } while (await timer.WaitForNextTickAsync(cancellationToken));
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
+    }
+
     public async Task<(string Token, DateTime ExpiresAt)> CreateAsync(Guid userId)
     {
         var refresh = tokens.CreateRefreshToken();
@@ -114,10 +138,10 @@ public sealed class RefreshSessions(Database database, TokenService tokens)
         lookup.Parameters.AddWithValue("hash", hash);
         if (await lookup.ExecuteScalarAsync() is not Guid familyId)
             return null;
-
+        
         // Один вход обрабатывается последовательно даже при одновременных refresh и logout.
         await using var familyLock = new NpgsqlCommand("""
-            SELECT pg_advisory_xact_lock(hashtextextended(CAST(@familyId AS text), 0));
+            SELECT pg_advisory_xact_lock(hashtextextended(CAST(@familyId AS text), 0)); 
             """, transaction.Connection, transaction);
         familyLock.Parameters.AddWithValue("familyId", familyId);
         await familyLock.ExecuteNonQueryAsync();

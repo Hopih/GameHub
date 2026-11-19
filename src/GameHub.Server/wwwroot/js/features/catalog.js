@@ -3,7 +3,7 @@ import { createPagination } from "../components/pagination.js";
 
 export function createCatalog({ favorites, onViewChange, onPageChange }) {
     const state = {
-        games: [], loaded: false, loading: false,
+        games: [], loaded: false, loading: false, loadFailed: false,
         page: 1, requestedPage: 1, hasNext: false,
         genre: "all", query: "", savedOnly: false,
         sort: "popular", requestedSort: "popular", librarySort: "popular"
@@ -32,9 +32,11 @@ export function createCatalog({ favorites, onViewChange, onPageChange }) {
         genres: document.querySelector(".genre-filters")
     };
 
-    function render() {
-        if (!state.loaded && !state.savedOnly) return;
+    const loadingCards = [...ui.grid.children];
 
+    function render() {
+        const catalogLoading = !state.savedOnly && state.loading;
+        const catalogError = !state.savedOnly && state.loadFailed;
         const source = state.savedOnly ? favorites.getGames() : state.games;
         const libraryStatus = state.savedOnly ? favorites.status : null;
         const games = source.filter(game =>
@@ -49,22 +51,27 @@ export function createCatalog({ favorites, onViewChange, onPageChange }) {
             if (state.librarySort === "newest") games.sort((a, b) => (Date.parse(b.released) || 0) - (Date.parse(a.released) || 0));
         }
 
-        renderGameCards(ui.grid, games, favorites);
-        ui.grid.setAttribute("aria-busy", String(libraryStatus === "loading" || (state.loading && !state.savedOnly)));
+        if (catalogLoading && !state.loaded) ui.grid.replaceChildren(...loadingCards);
+        else renderGameCards(ui.grid, games, favorites);
+        ui.grid.setAttribute("aria-busy", String(libraryStatus === "loading" || catalogLoading));
         ui.count.textContent = games.length;
         ui.title.textContent = state.savedOnly ? "Отмеченные игры" : "Каталог игр";
         const scope = state.savedOnly ? "среди отмеченных игр" : `на странице ${state.page}`;
-        ui.status.textContent = state.loading && !state.savedOnly
+        ui.status.textContent = catalogLoading
             ? `Загружаем страницу ${state.requestedPage}…`
             : state.query ? `Результаты по запросу «${ui.search.value.trim()}» ${scope}` : "";
+        if (catalogError) ui.status.textContent = `Не удалось загрузить страницу ${state.requestedPage}.`;
         if (libraryStatus === "loading") ui.status.textContent = "Загружаем избранное…";
         if (libraryStatus === "error") ui.status.textContent = "Не удалось загрузить избранное.";
         ui.retryFavorites.hidden = libraryStatus !== "error";
+        ui.error.hidden = !catalogError;
+        ui.retry.disabled = !catalogError;
         ui.loadedCount.textContent = state.savedOnly
             ? `Показано ${games.length} из ${source.length} отмеченных игр`
             : `Показано ${games.length} из ${source.length} игр страницы`;
+        if (!state.savedOnly && !state.loaded) ui.loadedCount.textContent = "Игры пока не загружены";
         ui.empty.hidden = games.length > 0 || libraryStatus === "loading" || libraryStatus === "error" ||
-            (state.loading && !state.savedOnly);
+            catalogLoading || catalogError;
         ui.emptyTitle.textContent = libraryStatus === "guest" ? "Войди, чтобы увидеть избранное"
             : state.savedOnly ? "Пока нет подходящих отметок" : "Ничего не нашлось";
         ui.emptyDescription.textContent = state.savedOnly
@@ -76,7 +83,7 @@ export function createCatalog({ favorites, onViewChange, onPageChange }) {
     }
 
     function updateFilters() {
-        ui.sort.disabled = state.loading;
+        ui.sort.disabled = !state.savedOnly && state.loading;
         ui.sort.value = state.savedOnly ? state.librarySort : state.loading ? state.requestedSort : state.sort;
         ui.genres.querySelectorAll("[data-genre]").forEach(button => {
             const active = button.dataset.genre === state.genre;
@@ -93,12 +100,11 @@ export function createCatalog({ favorites, onViewChange, onPageChange }) {
         });
     }
 
-    function show(savedOnly = false) {
-        state.genre = "all";
+    function show(savedOnly = false, genre = "all") {
+        state.genre = genre;
         state.query = "";
         state.savedOnly = savedOnly;
         ui.search.value = "";
-        updateFilters();
         render();
     }
 
@@ -123,18 +129,17 @@ export function createCatalog({ favorites, onViewChange, onPageChange }) {
         const button = event.target.closest("[data-genre]");
         if (!button) return;
         state.genre = button.dataset.genre;
-        updateFilters();
         render();
     });
     ui.favoriteFilter.addEventListener("click", () => {
         state.savedOnly = !state.savedOnly;
         onViewChange(state.savedOnly ? "library" : "catalog");
-        updateFilters();
         render();
     });
     ui.reset.addEventListener("click", () => {
-        show();
-        onViewChange("catalog");
+        const stayInLibrary = state.savedOnly && favorites.status !== "guest";
+        show(stayInLibrary);
+        onViewChange(stayInLibrary ? "library" : "catalog");
     });
     ui.retry.addEventListener("click", () => onPageChange(state.requestedPage, state.requestedSort));
     ui.retryFavorites.addEventListener("click", () => favorites.load());
@@ -143,22 +148,15 @@ export function createCatalog({ favorites, onViewChange, onPageChange }) {
     return {
         show,
         showGenre(genre) {
-            show();
-            state.genre = genre;
-            updateFilters();
-            render();
+            show(false, genre);
         },
         startLoading(page, sort = state.sort) {
             if (state.loading || !Number.isInteger(page) || page < 1) return false;
             state.loading = true;
             state.requestedPage = page;
             state.requestedSort = sort;
-            ui.retry.disabled = true;
-            ui.error.hidden = true;
-            ui.empty.hidden = true;
-            ui.status.textContent = `Загружаем страницу ${page}…`;
-            ui.grid.setAttribute("aria-busy", "true");
-            updateFilters();
+            state.loadFailed = false;
+            render();
             return true;
         },
         setPage(data, sort = state.requestedSort) {
@@ -169,27 +167,14 @@ export function createCatalog({ favorites, onViewChange, onPageChange }) {
             state.hasNext = data.hasNext;
             state.loaded = true;
             state.loading = false;
-            ui.retry.disabled = false;
-            ui.error.hidden = true;
+            state.loadFailed = false;
             render();
             if (pageChanged && !state.savedOnly) document.getElementById("catalog").scrollIntoView();
         },
         showError() {
             state.loading = false;
-            if (state.loaded || state.savedOnly) {
-                render();
-                ui.status.textContent = `Не удалось загрузить страницу ${state.requestedPage}.`;
-            } else {
-                ui.grid.replaceChildren();
-                ui.status.textContent = "";
-                ui.count.textContent = "0";
-                ui.loadedCount.textContent = "Игры пока не загружены";
-            }
-            ui.grid.setAttribute("aria-busy", "false");
-            ui.empty.hidden = true;
-            ui.error.hidden = false;
-            ui.retry.disabled = false;
-            updateFilters();
+            state.loadFailed = true;
+            render();
         }
     };
 }

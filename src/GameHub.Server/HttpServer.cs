@@ -4,6 +4,7 @@ namespace GameHub.Server;
 
 public class HttpServer
 {
+    private const int MaxConcurrentRequests = 32;
     private readonly Router _router;
     private readonly StaticFileHandler _staticFiles;
 
@@ -22,6 +23,12 @@ public class HttpServer
 
         Console.WriteLine($"Сервер запущен: {prefix}");
 
+        await Task.WhenAll(Enumerable.Range(0, MaxConcurrentRequests)
+            .Select(_ => ProcessRequestsAsync(listener)));
+    }
+
+    private async Task ProcessRequestsAsync(HttpListener listener)
+    {
         while (true)
         {
             var context = await listener.GetContextAsync();

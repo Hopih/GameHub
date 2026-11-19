@@ -22,6 +22,20 @@ export function createSession({ onSignInRequired, onError }) {
     let revision = 0;
     let refreshing = null;
     let sessionQueue = Promise.resolve();
+    let peerRefreshes = 0;
+    let waitingForPeerRefresh = false;
+
+    function announce(event) {
+        if (channel) {
+            channel.postMessage(event);
+        } else {
+            // Событие storage получают остальные вкладки. Токены остаются в памяти и cookie.
+            try {
+                localStorage.setItem(channelName, event);
+                localStorage.removeItem(channelName);
+            } catch { /* Хранилище может быть отключено в браузере. */ }
+        }
+    }
 
     function setSession(nextProfile, nextToken) {
         const accountChanged = profile?.id !== nextProfile?.id;
@@ -57,26 +71,53 @@ export function createSession({ onSignInRequired, onError }) {
 
         const startedAt = revision;
         refreshing = withSessionLock(async () => {
-            if (revision !== startedAt) return;
-            const response = await post("/auth/refresh");
-            if (revision !== startedAt) return;
-            if (response.status === 401) {
+            while (revision === startedAt) {
+                const beforeRequest = peerRefreshes;
+                const response = await post("/auth/refresh");
+                if (revision !== startedAt) return;
+                if (response.status !== 401) {
+                    if (response.ok && !navigator.locks) announce("refreshed");
+                    waitingForPeerRefresh = false;
+                    await readSession(response, startedAt);
+                    return;
+                }
+
+                // Другая вкладка могла сменить cookie, пока наш запрос был в пути.
+                if (beforeRequest !== peerRefreshes) continue;
+                waitingForPeerRefresh = !navigator.locks;
                 setSession(null, null);
                 return;
             }
-            await readSession(response, startedAt);
         }).finally(() => { refreshing = null; });
         return refreshing;
     }
 
-    channel?.addEventListener("message", event => {
-        if (event.data !== "login" && event.data !== "logout") return;
+    function afterCurrentRefresh() {
+        const startedAt = revision;
+        void (refreshing ?? Promise.resolve()).catch(() => {}).then(() => {
+            if (revision === startedAt) return restore();
+        }).catch(onError);
+    }
+
+    function onPeerEvent(event) {
+        if (event === "refreshed") {
+            peerRefreshes++;
+            if (waitingForPeerRefresh) {
+                waitingForPeerRefresh = false;
+                afterCurrentRefresh();
+            }
+            return;
+        }
+        if (event !== "login" && event !== "logout") return;
+        waitingForPeerRefresh = false;
         revision++;
         setSession(null, null);
-        if (event.data === "login") {
-            // Дождаться предыдущего refresh и прочитать cookie текущего аккаунта.
-            void (refreshing ?? Promise.resolve()).catch(() => {}).then(restore).catch(onError);
-        }
+        if (event === "login") afterCurrentRefresh();
+    }
+
+    if (channel) channel.addEventListener("message", event => onPeerEvent(event.data));
+    else window.addEventListener("storage", event => {
+        if (event.key === channelName) onPeerEvent(event.newValue);
     });
 
     return {
@@ -92,14 +133,16 @@ export function createSession({ onSignInRequired, onError }) {
         async login(data) {
             await withSessionLock(async () => {
                 await readSession(await post("/login", data));
-                channel?.postMessage("login");
+                waitingForPeerRefresh = false;
+                announce("login");
             });
         },
         async logout() {
             await withSessionLock(async () => {
                 await requireSuccess(await post("/auth/logout"));
                 setSession(null, null);
-                channel?.postMessage("logout");
+                waitingForPeerRefresh = false;
+                announce("logout");
             });
         },
         async request(url, options) {
