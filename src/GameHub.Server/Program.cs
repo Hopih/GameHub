@@ -63,6 +63,7 @@ var tokenService = new TokenService(Options.Create(jwtOptions));
 var sessions = new RefreshSessions(database, tokenService);
 var authorizeController = new AuthorizeController(database, tokenService, sessions);
 var favoritesController = new FavoritesController(database);
+var settingsController = new SettingsController(database);
 using var httpClient = new HttpClient();
 var rawgClient = new RawgClient(httpClient, apiKey);
 var gamesController = new GamesController(rawgClient);
@@ -89,6 +90,8 @@ router.RegisterProtected("GET", "/favorites", tokenService, favoritesController.
 router.RegisterProtected("PUT", "/favorites", tokenService, favoritesController.SaveAsync);
 router.RegisterProtected("DELETE", "/favorites", tokenService, favoritesController.DeleteAsync);
 router.RegisterProtected("DELETE","/favorites/clear", tokenService, favoritesController.ClearAsync);
+router.RegisterProtected("GET", "/settings", tokenService, settingsController.GetAsync);
+router.RegisterProtected("PUT", "/settings", tokenService, settingsController.SaveAsync);
 
 var staticFiles = new StaticFileHandler(Path.Combine(AppContext.BaseDirectory, "wwwroot"));
 var server = new HttpServer(router, staticFiles);

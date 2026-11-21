@@ -92,12 +92,117 @@ function initRecommendations() {
     const recommendations = createRecommendations(favorites);
     const form = document.getElementById("recommendation-form");
     const description = document.getElementById("recommendation-description");
+    const descriptionFields = document.getElementById("recommendation-description-fields");
+    const search = document.getElementById("search-recommendations");
     const reset = document.getElementById("reset-recommendations");
+    const settings = document.getElementById("recommendation-settings");
+    const openSettings = document.getElementById("open-recommendation-settings");
+    const cancelSettings = document.getElementById("cancel-recommendation-settings");
+    const settingsForm = document.getElementById("recommendation-settings-form");
+    const criteria = settingsForm.querySelector("fieldset");
+    const saveSettings = settingsForm.querySelector("[type=submit]");
+    const settingsError = document.getElementById("recommendation-settings-error");
+    const byDescription = document.getElementById("recommendation-sort-description");
+    const byPersonal = document.getElementById("recommendation-sort-personal");
+    const all = document.getElementById("recommendation-sort-all");
+    const defaultSettings = { description: byDescription.defaultChecked, personal: byPersonal.defaultChecked };
+    let sortOptions = defaultSettings;
+    let accountVersion = 0;
     let activeDescription = "";
     let latestRequest = 0;
 
+    openSettings.addEventListener("click", () => {
+        byDescription.checked = sortOptions.description;
+        byPersonal.checked = sortOptions.personal;
+        updateAll();
+        settingsError.hidden = true;
+        settings.showModal();
+    });
+    cancelSettings.addEventListener("click", () => settings.close());
+    settings.addEventListener("cancel", event => {
+        if (saveSettings.disabled) event.preventDefault();
+    });
+    byDescription.addEventListener("change", updateAll);
+    byPersonal.addEventListener("change", updateAll);
+    all.addEventListener("change", () => {
+        byDescription.checked = byPersonal.checked = all.checked;
+        updateAll();
+    });
+    settingsForm.addEventListener("submit", async event => {
+        event.preventDefault();
+        if (saveSettings.disabled) return;
+        const next = { description: byDescription.checked, personal: byPersonal.checked };
+        if (next.description === sortOptions.description && next.personal === sortOptions.personal) {
+            settings.close();
+            return;
+        }
+
+        const version = accountVersion;
+        settingsError.hidden = true;
+        setSaving(true);
+        try {
+            if (session.profile) {
+                await session.request("/settings", {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(next)
+                });
+            }
+            if (version !== accountVersion) return;
+            settings.close();
+            applyOptions(next);
+        } catch {
+            if (version !== accountVersion) return;
+            settingsError.textContent = "Не удалось сохранить настройки. Попробуй ещё раз.";
+            settingsError.hidden = false;
+        } finally {
+            if (version === accountVersion) setSaving(false);
+        }
+    });
+
+    session.subscribe(async profile => {
+        const version = ++accountVersion;
+        settings.close();
+        setSaving(false);
+        openSettings.disabled = Boolean(profile);
+        applyOptions(defaultSettings);
+        if (!profile) return;
+
+        try {
+            const response = await session.request("/settings");
+            const saved = await response.json();
+            if (version !== accountVersion) return;
+            if (typeof saved?.description !== "boolean" || typeof saved?.personal !== "boolean") {
+                throw new Error("Неверный формат настроек.");
+            }
+            applyOptions(saved);
+        } catch {
+            if (version === accountVersion) notify("Не удалось загрузить настройки рекомендаций.");
+        } finally {
+            if (version === accountVersion) openSettings.disabled = false;
+        }
+    });
+
+    function setSaving(saving) {
+        criteria.disabled = saveSettings.disabled = cancelSettings.disabled = saving;
+    }
+
+    function applyOptions(next) {
+        const descriptionChanged = sortOptions.description !== next.description;
+        sortOptions = next;
+        if (!descriptionChanged) return;
+        descriptionFields.hidden = description.disabled = search.hidden = !sortOptions.description;
+        void loadRecommendations();
+    }
+
+    function updateAll() {
+        all.checked = byDescription.checked && byPersonal.checked;
+        all.indeterminate = byDescription.checked !== byPersonal.checked;
+    }
+
     form.addEventListener("submit", event => {
         event.preventDefault();
+        if (!sortOptions.description) return;
         description.value = description.value.trim();
         if (!description.reportValidity()) return;
         activeDescription = description.value;
@@ -113,15 +218,14 @@ function initRecommendations() {
     void loadRecommendations();
 
     async function loadRecommendations() {
-        const query = activeDescription;
+        const query = sortOptions.description ? activeDescription : "";
         const request = ++latestRequest;
         reset.hidden = !query;
         recommendations.startLoading(Boolean(query));
         try {
             const data = query ? await getRecommendations(query) : await getGames();
             if (request !== latestRequest) return;
-            if (query) recommendations.setMatches(data);
-            else recommendations.setGames(data.results);
+            recommendations.setResults(data);
         } catch (error) {
             if (request !== latestRequest) return;
             console.error("Не удалось загрузить рекомендации:", error);

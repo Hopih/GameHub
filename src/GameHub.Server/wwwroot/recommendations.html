@@ -50,12 +50,16 @@
                     <a class="text-link" href="/#catalog" data-nav="catalog">Открыть каталог<svg class="icon" aria-hidden="true"><use href="#icon-arrow"/></svg></a>
                 </div>
                 <form id="recommendation-form" class="recommendation-form">
-                    <label for="recommendation-description">Какую игру ищешь?</label>
-                    <textarea id="recommendation-description" rows="3" maxlength="1000" required
-                              placeholder="Например, хочу строить заводы и прокладывать конвейеры"></textarea>
+                    <div id="recommendation-description-fields" class="recommendation-description-fields">
+                        <label for="recommendation-description">Какую игру ищешь?</label>
+                        <textarea id="recommendation-description" rows="3" maxlength="1000" required
+                                  placeholder="Например, хочу строить заводы и прокладывать конвейеры"></textarea>
+                    </div>
                     <div class="recommendation-actions">
-                        <button class="button button-primary" type="submit">Подобрать игры</button>
+                        <button id="search-recommendations" class="button button-primary" type="submit">Подобрать игры</button>
                         <button id="reset-recommendations" class="button button-secondary" type="button" hidden>Сбросить</button>
+                        <button id="open-recommendation-settings" class="button button-secondary" type="button"
+                                aria-haspopup="dialog" aria-controls="recommendation-settings">Настройка рекомендаций</button>
                     </div>
                 </form>
                 <p id="recommended-status" class="section-note" role="status">Загружаем игры из каталога…</p>
@@ -66,6 +70,22 @@
     </main>
 
     <footer class="site-footer"><div class="footer-inner"><a class="brand footer-brand" href="/">Game<span>Hub</span></a><p>Твоя следующая любимая игра — где-то рядом.</p><a href="https://rawg.io/" target="_blank" rel="noopener noreferrer">Данные об играх — RAWG<svg class="icon" aria-hidden="true"><use href="#icon-arrow"/></svg></a></div></footer>
+    <dialog id="recommendation-settings" class="recommendation-settings" aria-labelledby="recommendation-settings-title">
+        <form id="recommendation-settings-form">
+            <h2 id="recommendation-settings-title">Настройка рекомендаций</h2>
+            <fieldset>
+                <legend>Критерии сортировки</legend>
+                <label><input id="recommendation-sort-description" type="checkbox" checked> По описанию</label>
+                <label><input id="recommendation-sort-personal" type="checkbox"> По избранным играм из профиля</label>
+                <label><input id="recommendation-sort-all" type="checkbox"> Все</label>
+            </fieldset>
+            <p id="recommendation-settings-error" class="recommendation-settings-error" role="alert" hidden></p>
+            <div class="recommendation-actions">
+                <button class="button button-primary" type="submit">Применить</button>
+                <button id="cancel-recommendation-settings" class="button button-secondary" type="button">Отмена</button>
+            </div>
+        </form>
+    </dialog>
     <dialog id="account-dialog" class="account-dialog" aria-labelledby="account-title">
         <div class="account-dialog-header">
             <h2 id="account-title">Вход в GameHub</h2>

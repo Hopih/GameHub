@@ -161,6 +161,11 @@ main[data-current-page="library"] #catalog-title {
     margin-bottom: 24px;
 }
 
+.recommendation-description-fields {
+    display: grid;
+    gap: 12px;
+}
+
 .recommendation-form label {
     font-weight: 650;
 }
@@ -189,6 +194,73 @@ main[data-current-page="library"] #catalog-title {
     display: flex;
     flex-wrap: wrap;
     gap: 10px;
+}
+
+.recommendation-settings {
+    width: min(380px, calc(100% - 32px));
+    max-height: calc(100% - 32px);
+    padding: 24px;
+    border: 1px solid #414942;
+    border-radius: 16px;
+    background: var(--surface);
+    color: var(--text);
+}
+
+.recommendation-settings::backdrop {
+    background: rgb(5 8 6 / 72%);
+}
+
+.recommendation-settings h2 {
+    margin-bottom: 16px;
+    font-size: 22px;
+}
+
+.recommendation-settings fieldset {
+    display: grid;
+    gap: 4px;
+    margin: 0 0 20px;
+    padding: 0;
+    border: 0;
+}
+
+.recommendation-settings legend {
+    margin-bottom: 6px;
+    padding: 0;
+    color: var(--muted);
+    font-size: 14px;
+}
+
+.recommendation-settings label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 38px;
+    padding: 4px 8px;
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+.recommendation-settings label:hover {
+    background: var(--surface-hover);
+}
+
+.recommendation-settings input {
+    width: 17px;
+    height: 17px;
+    margin: 0;
+    accent-color: var(--lime);
+    cursor: pointer;
+}
+
+.recommendation-settings .button {
+    min-height: 42px;
+    padding: 8px 16px;
+}
+
+.recommendation-settings-error {
+    margin: 0 0 14px;
+    color: #ffb5ac;
+    font-size: 14px;
 }
 
 .section-heading {
