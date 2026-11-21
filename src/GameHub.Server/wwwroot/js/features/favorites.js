@@ -50,7 +50,7 @@ export function createFavorites(session) {
             publish();
         }
     });
-
+    
     return {
         has(id) { return games.has(id); },
         get count() { return games.size; },
@@ -89,6 +89,20 @@ export function createFavorites(session) {
                 if (version === accountVersion) updating.delete(game.id);
             }
         },
+        
+        async clear() {
+            try{
+                if (status !== "ready") await load();
+                if (games.size === 0) return;
+                await session.request("/favorites/clear", { method: "DELETE" });
+                games.clear();
+                publish();
+            }
+            finally{
+                accountVersion++;
+            }
+        },
+        
         subscribe(listener) {
             listeners.add(listener);
             return () => listeners.delete(listener);
@@ -98,6 +112,7 @@ export function createFavorites(session) {
 
 export function bindFavoriteControls(favorites, session, openLogin, notify) {
     const badge = document.getElementById("saved-count");
+    const clear = document.getElementById("clear-favorites");
     favorites.subscribe(() => {
         document.querySelectorAll("[data-favorite-id]").forEach(button => {
             updateFavoriteButton(button, favorites.has(Number(button.dataset.favoriteId)));
@@ -105,6 +120,10 @@ export function bindFavoriteControls(favorites, session, openLogin, notify) {
         badge.textContent = favorites.count;
         badge.hidden = favorites.count === 0;
     });
+    
+    clear?.addEventListener("click", async () => {
+        favorites.clear()
+    })
 
     document.addEventListener("favorite-toggle", async event => {
         if (!session.profile) {

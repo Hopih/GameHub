@@ -95,6 +95,17 @@ public sealed class FavoritesController(Database database)
         SendNoContent(context.Response);
     }
 
+    public async Task ClearAsync(HttpListenerContext context, Guid userId, ClaimsIdentity identity)
+    {
+        await using var connection = await database.OpenConnectionAsync();
+        await using var command = new NpgsqlCommand("""
+            DELETE FROM public.user_favorites WHERE user_id = @userId;
+            """, connection);
+        command.Parameters.AddWithValue("userId", userId);
+        await command.ExecuteNonQueryAsync();
+        SendNoContent(context.Response);       
+    }
+
     private static void SendNoContent(HttpListenerResponse response)
     {
         response.StatusCode = (int)HttpStatusCode.NoContent;

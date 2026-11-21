@@ -12,7 +12,7 @@ public sealed class SemanticRecommendations
     private const int TagLimit = 3;
     private const int TagSearchLimit = 8;
     private const int GameLimit = 12;
-    private const double MinBestTagScore = 0.81;
+    private const double MinBestTagScore = 0.82;
     private const double MinTagScore = 0.80;
     private const double MaxTagScoreGap = 0.027;
     private const double MaxRelatedTagScoreGap = 0.065;

@@ -88,6 +88,7 @@ router.RegisterProtected("GET", "/auth/me", tokenService, authorizeController.Au
 router.RegisterProtected("GET", "/favorites", tokenService, favoritesController.ListAsync);
 router.RegisterProtected("PUT", "/favorites", tokenService, favoritesController.SaveAsync);
 router.RegisterProtected("DELETE", "/favorites", tokenService, favoritesController.DeleteAsync);
+router.RegisterProtected("DELETE","/favorites/clear", tokenService, favoritesController.ClearAsync);
 
 var staticFiles = new StaticFileHandler(Path.Combine(AppContext.BaseDirectory, "wwwroot"));
 var server = new HttpServer(router, staticFiles);
