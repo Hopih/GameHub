@@ -1,6 +1,9 @@
-async function getGameList(url) {
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(`Games request failed: ${response.status}`);
+async function getGameList(url, options) {
+    const response = await fetch(url, options);
+    if (!response.ok) {
+        const message = options?.method === "POST" ? await response.text() : "";
+        throw new Error(message || `Games request failed: ${response.status}`);
+    }
 
     const data = await response.json();
     if (!Array.isArray(data.results) || !data.results.every(game =>
@@ -29,4 +32,16 @@ export async function getGames(page = 1, sort = "popular", query = "") {
 export async function getFeaturedGames() {
     const data = await getGameList("/games/featured");
     return data.results;
+}
+
+export async function getRecommendations(description) {
+    const data = await getGameList("/games/recommendations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ description })
+    });
+    if (!Array.isArray(data.tags) || !data.tags.every(tag => typeof tag === "string")) {
+        throw new Error("Unexpected recommendation tags");
+    }
+    return data;
 }

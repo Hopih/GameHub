@@ -66,6 +66,12 @@ var favoritesController = new FavoritesController(database);
 using var httpClient = new HttpClient();
 var rawgClient = new RawgClient(httpClient, apiKey);
 var gamesController = new GamesController(rawgClient);
+var recommendations = new SemanticRecommendations(
+    httpClient,
+    rawgClient,
+    new Uri(Environment.GetEnvironmentVariable("GAMEHUB_EMBEDDINGS_URL") ?? "http://127.0.0.1:18081"),
+    new Uri(Environment.GetEnvironmentVariable("GAMEHUB_QDRANT_URL") ?? "http://127.0.0.1:6333"));
+var recommendationsController = new RecommendationsController(recommendations);
 router.Register("GET", "/health", healthController.CheckHealthAsync);
 router.Register("GET", "/health/db", healthController.CheckDatabaseAsync);
 router.Register("GET", "/", homeController.IndexAsync);
@@ -73,6 +79,7 @@ router.Register("GET", "/library", homeController.LibraryAsync);
 router.Register("GET", "/recommendations", homeController.RecommendationsAsync);
 router.Register("GET","/games", gamesController.GetAllAsync);
 router.Register("GET", "/games/featured", gamesController.GetFeaturedAsync);
+router.Register("POST", "/games/recommendations", recommendationsController.SearchAsync);
 router.Register("POST", "/register", authorizeController.RegisterAsync);
 router.Register("POST", "/login", authorizeController.LoginAsync);
 router.Register("POST", "/auth/refresh", authorizeController.RefreshAsync);

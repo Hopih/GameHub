@@ -154,6 +154,43 @@ main[data-current-page="library"] #catalog-title {
     letter-spacing: -.035em;
 }
 
+.recommendation-form {
+    display: grid;
+    gap: 12px;
+    max-width: 740px;
+    margin-bottom: 24px;
+}
+
+.recommendation-form label {
+    font-weight: 650;
+}
+
+.recommendation-form textarea {
+    width: 100%;
+    padding: 12px 14px;
+    resize: vertical;
+    background: #24282a;
+    color: inherit;
+    border: 1px solid #454d49;
+    border-radius: 9px;
+    font: inherit;
+}
+
+.recommendation-form textarea::placeholder {
+    color: #a7adab;
+}
+
+.recommendation-form textarea:focus-visible {
+    outline: 2px solid var(--lime);
+    outline-offset: 2px;
+}
+
+.recommendation-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
 .section-heading {
     display: flex;
     align-items: center;

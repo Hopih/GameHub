@@ -49,6 +49,15 @@
                     <h1 id="recommended-title">Рекомендованные игры</h1>
                     <a class="text-link" href="/#catalog" data-nav="catalog">Открыть каталог<svg class="icon" aria-hidden="true"><use href="#icon-arrow"/></svg></a>
                 </div>
+                <form id="recommendation-form" class="recommendation-form">
+                    <label for="recommendation-description">Какую игру ищешь?</label>
+                    <textarea id="recommendation-description" rows="3" maxlength="1000" required
+                              placeholder="Например, хочу строить заводы и прокладывать конвейеры"></textarea>
+                    <div class="recommendation-actions">
+                        <button class="button button-primary" type="submit">Подобрать игры</button>
+                        <button id="reset-recommendations" class="button button-secondary" type="button" hidden>Сбросить</button>
+                    </div>
+                </form>
                 <p id="recommended-status" class="section-note" role="status">Загружаем игры из каталога…</p>
                 <div id="recommended-games" class="game-grid" aria-busy="true"></div>
                 <button id="retry-recommendations" class="button button-secondary" type="button" hidden>Попробовать снова</button>

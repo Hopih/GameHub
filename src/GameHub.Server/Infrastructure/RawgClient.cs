@@ -18,7 +18,14 @@ public class RawgClient
         _apiKey = apiKey;
     }
 
-    public async Task<string> GetGamesAsync(int page = 1, int pageSize = 40, string ordering = "-added", string? search = null)
+    public async Task<string> GetGamesAsync(
+        int page = 1,
+        int pageSize = 40,
+        string ordering = "-added",
+        string? search = null,
+        string? tag = null,
+        string? genre = null,
+        CancellationToken cancellationToken = default)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(page, 1);
         ArgumentOutOfRangeException.ThrowIfLessThan(pageSize, 1);
@@ -29,6 +36,11 @@ public class RawgClient
             requestUrl += $"&search={Uri.EscapeDataString(search)}";
         }
 
+        if (tag is not null)
+            requestUrl += $"&tags={Uri.EscapeDataString(tag)}";
+
+        if (genre is not null)
+            requestUrl += $"&genres={Uri.EscapeDataString(genre)}";
 
         if (ordering == "-released")
         {
@@ -36,10 +48,10 @@ public class RawgClient
             requestUrl += $"&dates=1900-01-01,{today}";
         }
 
-        using var response = await _httpClient.GetAsync(requestUrl);
+        using var response = await _httpClient.GetAsync(requestUrl, cancellationToken);
         response.EnsureSuccessStatusCode();
 
-        return await response.Content.ReadAsStringAsync();
+        return await response.Content.ReadAsStringAsync(cancellationToken);
     }
 
     public async Task<string> GetGameAsync(string slug)

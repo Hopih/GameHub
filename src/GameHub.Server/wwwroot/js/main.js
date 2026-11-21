@@ -1,4 +1,4 @@
- import { getGames, getFeaturedGames } from "./api/games.js";
+import { getGames, getFeaturedGames, getRecommendations } from "./api/games.js";
 import { createSession } from "./api/session.js";
 import { bindAccount } from "./features/account.js";
 import { createCatalog } from "./features/catalog.js";
@@ -90,16 +90,42 @@ function initCatalog(isLibrary) {
 
 function initRecommendations() {
     const recommendations = createRecommendations(favorites);
+    const form = document.getElementById("recommendation-form");
+    const description = document.getElementById("recommendation-description");
+    const reset = document.getElementById("reset-recommendations");
+    let activeDescription = "";
+    let latestRequest = 0;
+
+    form.addEventListener("submit", event => {
+        event.preventDefault();
+        description.value = description.value.trim();
+        if (!description.reportValidity()) return;
+        activeDescription = description.value;
+        void loadRecommendations();
+    });
+    reset.addEventListener("click", () => {
+        form.reset();
+        activeDescription = "";
+        description.focus();
+        void loadRecommendations();
+    });
     document.getElementById("retry-recommendations").addEventListener("click", loadRecommendations);
     void loadRecommendations();
 
     async function loadRecommendations() {
-        recommendations.startLoading();
+        const query = activeDescription;
+        const request = ++latestRequest;
+        reset.hidden = !query;
+        recommendations.startLoading(Boolean(query));
         try {
-            recommendations.setGames((await getGames()).results);
+            const data = query ? await getRecommendations(query) : await getGames();
+            if (request !== latestRequest) return;
+            if (query) recommendations.setMatches(data);
+            else recommendations.setGames(data.results);
         } catch (error) {
+            if (request !== latestRequest) return;
             console.error("Не удалось загрузить рекомендации:", error);
-            recommendations.showError();
+            recommendations.showError(Boolean(query));
         }
     }
 }

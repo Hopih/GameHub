@@ -7,8 +7,18 @@ export function createRecommendations(favorites) {
     const status = document.getElementById("recommended-status");
     const retry = document.getElementById("retry-recommendations");
     let popularGames = null;
+    let matches = null;
+    let canRender = false;
 
     function renderRecommendations() {
+        if (!canRender) return;
+        if (matches) {
+            renderGameCards(grid, matches.results, favorites);
+            status.textContent = matches.results.length
+                ? `Подходящие теги — ${matches.tags.join(", ")}.`
+                : "Не нашли подходящих игр. Попробуй описать жанр или игровые механики.";
+            return;
+        }
         if (!popularGames) return;
 
         const genreWeights = new Map();
@@ -36,18 +46,30 @@ export function createRecommendations(favorites) {
     favorites.subscribe(renderRecommendations);
 
     return {
-        startLoading() {
-            status.textContent = "Загружаем игры из каталога…";
+        startLoading(byDescription) {
+            canRender = false;
+            status.textContent = byDescription ? "Подбираем игры по описанию…" : "Загружаем игры из каталога…";
+            grid.replaceChildren();
             grid.setAttribute("aria-busy", "true");
             retry.hidden = true;
         },
         setGames(games) {
+            matches = null;
             popularGames = games;
+            canRender = true;
             renderRecommendations();
         },
-        showError() {
+        setMatches(data) {
+            matches = data;
+            canRender = true;
+            renderRecommendations();
+        },
+        showError(byDescription) {
+            canRender = false;
             grid.setAttribute("aria-busy", "false");
-            status.textContent = "Не удалось загрузить рекомендации.";
+            status.textContent = byDescription
+                ? "Поиск по описанию временно недоступен. Попробуй ещё раз."
+                : "Не удалось загрузить рекомендации.";
             retry.hidden = false;
         }
     };
