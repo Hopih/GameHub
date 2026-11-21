@@ -69,9 +69,9 @@
                 <p id="featured-status" class="section-note" role="status">Загружаем игры из каталога…</p>
             </section>
 
-            <section id="news" class="section stories" aria-labelledby="news-title">
+            <section class="section stories" aria-labelledby="spotlights-title">
                 <div class="section-heading">
-                    <div><span class="section-kicker">ЕЩЁ НЕМНОГО ВДОХНОВЕНИЯ</span><h2 id="news-title">В игровом мире</h2></div>
+                    <div><span class="section-kicker">ЕЩЁ НЕМНОГО ВДОХНОВЕНИЯ</span><h2 id="spotlights-title">В игровом мире</h2></div>
                     <span class="quiet-label">Есть во что погрузиться</span>
                 </div>
                 <div class="story-grid">
@@ -86,6 +86,20 @@
                 </div>
                 <p id="spotlight-status" class="section-note" role="status">Загружаем обложки из RAWG…</p>
                 <button id="retry-spotlights" class="text-link spotlight-retry" type="button" hidden>Загрузить подборку ещё раз</button>
+            </section>
+
+            <section id="news" class="section" aria-labelledby="news-title">
+                <div class="section-heading"><h2 id="news-title">Новости из Steam</h2></div>
+                <form id="steam-news-search">
+                    <label for="steam-news-query">Название игры</label>
+                    <div class="steam-news-form">
+                        <input id="steam-news-query" name="q" type="search" placeholder="Например, Hades" maxlength="100" required>
+                        <button class="button button-secondary" type="submit">Найти игру</button>
+                    </div>
+                </form>
+                <div id="steam-news-games" class="steam-news-games" role="group" aria-label="Игры в Steam" hidden></div>
+                <p id="steam-news-status" class="section-note" role="status"></p>
+                <ul id="steam-news-posts" class="steam-news-posts" aria-label="Последние публикации" hidden></ul>
             </section>
 
             <section id="catalog" class="section catalog" aria-labelledby="catalog-title">

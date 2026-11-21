@@ -1,7 +1,5 @@
 using System.Net;
 using System.Net.Http.Json;
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -9,7 +7,6 @@ namespace GameHub.Server.Infrastructure;
 
 public sealed class SemanticRecommendations
 {
-    private const int EmbeddingBatchSize = 16;
     private const int PointBatchSize = 128;
     private const int TagLimit = 3;
     private const int TagSearchLimit = 8;
@@ -24,7 +21,9 @@ public sealed class SemanticRecommendations
 
     private readonly HttpClient _httpClient;
     private readonly RawgClient _rawgClient;
-    private readonly Uri _embeddingsUrl;
+    private readonly EmbeddingClient _embeddings;
+    private readonly GameSearchIndex _games;
+    private readonly GameReranker? _reranker;
     private readonly Uri _qdrantUrl;
     private readonly RecommendationTag[] _tags;
     private readonly RecommendationTag[] _rawgTags;
@@ -34,17 +33,19 @@ public sealed class SemanticRecommendations
     private readonly SemaphoreSlim _indexLock = new(1);
     private readonly SemaphoreSlim _rawgIndexLock = new(1);
 
-    public SemanticRecommendations(HttpClient httpClient, RawgClient rawgClient, Uri embeddingsUrl, Uri qdrantUrl)
+    public SemanticRecommendations(HttpClient httpClient, RawgClient rawgClient, Uri embeddingsUrl, Uri qdrantUrl, Uri? rerankerUrl = null)
     {
         _httpClient = httpClient;
         _rawgClient = rawgClient;
-        _embeddingsUrl = embeddingsUrl;
+        _embeddings = new EmbeddingClient(httpClient, embeddingsUrl);
+        _games = new GameSearchIndex(httpClient, qdrantUrl);
+        _reranker = rerankerUrl is null ? null : new GameReranker(httpClient, rerankerUrl, rawgClient, _games);
         _qdrantUrl = qdrantUrl;
         var directory = Path.Combine(AppContext.BaseDirectory, "Infrastructure");
         var path = Path.Combine(directory, "RecommendationTags.json");
         _tags = JsonSerializer.Deserialize<RecommendationTag[]>(File.ReadAllBytes(path), JsonSerializerOptions.Web)
             ?? throw new InvalidDataException("Каталог тегов рекомендаций пуст.");
-        _tagVersion = VersionHash(JsonSerializer.Serialize(_tags));
+        _tagVersion = EmbeddingClient.VersionHash(JsonSerializer.Serialize(_tags));
 
         var rawgPath = Path.Combine(directory, "RawgRecommendationTags.json");
         var rawgTags = JsonSerializer.Deserialize<RawgTag[]>(File.ReadAllBytes(rawgPath), JsonSerializerOptions.Web)
@@ -61,16 +62,24 @@ public sealed class SemanticRecommendations
                 tag.RussianName is null ? $"Video games featuring {tag.Name}." : $"Игры на тему «{tag.RussianName}». {tag.Name}.",
                 false))
             .ToArray();
-        _rawgTagVersion = VersionHash(JsonSerializer.Serialize(_rawgTags));
+        _rawgTagVersion = EmbeddingClient.VersionHash(JsonSerializer.Serialize(_rawgTags));
     }
 
     public async Task<RecommendationResult> FindAsync(string description, CancellationToken cancellationToken)
     {
-        var model = await _httpClient.GetFromJsonAsync<JsonElement>(new Uri(_embeddingsUrl, "/info"), cancellationToken);
-        var modelVersion = VersionHash(model.GetProperty("model_id").GetString() + "|" + model.GetProperty("model_sha").GetString());
+        var modelVersion = await _embeddings.GetModelVersionAsync(cancellationToken);
+        var queryVector = (await _embeddings.EmbedAsync([$"query: {description}"], cancellationToken))[0];
+        var candidateLimit = _reranker is null ? GameLimit : GameReranker.CandidateLimit;
+        var indexed = await _games.SearchAsync(modelVersion, queryVector, candidateLimit, _reranker is not null, cancellationToken);
+        if (indexed.Length > 0)
+        {
+            if (_reranker is not null)
+                indexed = await _reranker.RankAsync(description, modelVersion, indexed, cancellationToken);
+            return new RecommendationResult([], indexed.Take(GameLimit).Select(candidate => candidate.Game).ToArray());
+        }
+
         var collection = $"gamehub_recommendation_tags_{modelVersion}_{_tagVersion}";
         var rawgCollection = $"gamehub_recommendation_rawg_tags_{modelVersion}_{_rawgTagVersion}";
-        var queryVector = (await EmbedAsync([$"query: {description}"], cancellationToken))[0];
         await EnsureIndexAsync(collection, queryVector.Length, cancellationToken);
 
         var hits = await FindTagsAsync(collection, _tags, queryVector, cancellationToken);
@@ -236,9 +245,9 @@ public sealed class SemanticRecommendations
         foreach (var batch in tags.Chunk(PointBatchSize))
         {
             var vectors = new List<float[]>(batch.Length);
-            foreach (var inputs in batch.Chunk(EmbeddingBatchSize))
+            foreach (var inputs in batch.Chunk(EmbeddingClient.BatchSize))
             {
-                vectors.AddRange(await EmbedAsync(
+                vectors.AddRange(await _embeddings.EmbedAsync(
                     inputs.Select(tag => $"passage: {tag.Name}. {tag.Description}").ToArray(), cancellationToken));
             }
 
@@ -269,19 +278,6 @@ public sealed class SemanticRecommendations
         return data.GetProperty("result").GetProperty("points_count").GetInt32();
     }
 
-    private async Task<float[][]> EmbedAsync(string[] inputs, CancellationToken cancellationToken)
-    {
-        using var response = await _httpClient.PostAsJsonAsync(
-            new Uri(_embeddingsUrl, "/embed"),
-            new { inputs },
-            cancellationToken);
-        response.EnsureSuccessStatusCode();
-        var vectors = await response.Content.ReadFromJsonAsync<float[][]>(cancellationToken);
-        if (vectors is null || vectors.Length != inputs.Length || vectors.Any(vector => vector.Length != 384))
-            throw new InvalidDataException("Модель должна вернуть один вектор из 384 чисел на каждый текст.");
-        return vectors;
-    }
-
     private async Task<JsonElement[]> FindGamesAsync(RecommendationTag tag, CancellationToken cancellationToken)
     {
         var json = await _rawgClient.GetGamesAsync(
@@ -299,9 +295,6 @@ public sealed class SemanticRecommendations
 
     private Uri CollectionUri(string collection, string path = "") =>
         new(_qdrantUrl, $"/collections/{collection}{path}");
-
-    private static string VersionHash(string text) =>
-        Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text)).AsSpan(0, 8));
 
     private sealed record RecommendationTag(string Slug, string Name, string Description, bool IsGenre);
     private sealed record RawgTag(string Slug, string Name, string? RussianName, string[]? Aliases);

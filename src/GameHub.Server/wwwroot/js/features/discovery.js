@@ -16,7 +16,7 @@ export function createRecommendations(favorites) {
         renderGameCards(grid, games, favorites);
         if (tags) {
             status.textContent = games.length
-                ? `Подходящие теги — ${tags.join(", ")}.`
+                ? (tags.length ? `Подходящие теги — ${tags.join(", ")}.` : "Игры по твоему описанию.")
                 : "Не нашли подходящих игр. Попробуй описать жанр или игровые механики.";
         } else {
             status.textContent = games.length

@@ -3,6 +3,7 @@ import { createSession } from "./api/session.js";
 import { bindAccount } from "./features/account.js";
 import { createCatalog } from "./features/catalog.js";
 import { createDiscovery, createRecommendations } from "./features/discovery.js";
+import { initSteamNews } from "./features/steam-news.js";
 import { createFavorites, bindFavoriteControls } from "./features/favorites.js";
 import { initNavigation, scrollToCatalog } from "./features/navigation.js";
 import { createNotifier } from "./ui/notification.js";
@@ -44,6 +45,7 @@ function initCatalog(isLibrary) {
         return;
     }
 
+    initSteamNews();
     const query = new URLSearchParams(location.search).get("q")?.trim();
     if (query) {
         catalog.setQuery(query);

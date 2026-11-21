@@ -150,3 +150,50 @@
 .spotlight-retry {
     margin-top: 12px;
 }
+
+.steam-news-form, .steam-news-games {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.steam-news-form input {
+    flex: 1 1 210px;
+    min-width: 0;
+    max-width: 380px;
+    min-height: 49px;
+    padding: 10px 14px;
+    color: var(--text);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+}
+
+.steam-news-games {
+    margin-top: 12px;
+}
+
+.steam-news-posts {
+    list-style: none;
+    margin: 16px 0 0;
+    padding: 0;
+}
+
+.steam-news-posts li {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 4px 16px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--line);
+}
+
+.steam-news-posts a:hover {
+    color: var(--lime);
+}
+
+.steam-news-posts time {
+    color: var(--muted);
+    font-size: 12px;
+}

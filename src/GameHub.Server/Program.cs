@@ -41,6 +41,56 @@ if (string.IsNullOrWhiteSpace(apiKey))
     throw new InvalidOperationException("Задайте RAWG_API_KEY или RawgApiKey в appsettings.Local.json.");
 }
 
+using var httpClient = new HttpClient();
+var rawgClient = new RawgClient(httpClient, apiKey);
+var embeddingsUrl = new Uri(Environment.GetEnvironmentVariable("GAMEHUB_EMBEDDINGS_URL") ?? "http://127.0.0.1:18081");
+var qdrantUrl = new Uri(Environment.GetEnvironmentVariable("GAMEHUB_QDRANT_URL") ?? "http://127.0.0.1:6333");
+
+if (args.FirstOrDefault() == "--import-games")
+{
+    var target = GameIndexImporter.GameCount;
+    if (args.Length > 2 || args.Length == 2 && (!int.TryParse(args[1], out target) || target is < 1 or > GameIndexImporter.GameCount))
+    {
+        Console.Error.WriteLine($"Укажите число игр от 1 до {GameIndexImporter.GameCount} или запустите --import-games без числа.");
+        Environment.ExitCode = 2;
+        return;
+    }
+
+    using var importCancellation = new CancellationTokenSource();
+    ConsoleCancelEventHandler cancelImport = (_, ev) =>
+    {
+        ev.Cancel = true;
+        importCancellation.Cancel();
+    };
+    Console.CancelKeyPress += cancelImport;
+    try
+    {
+        var importer = new GameIndexImporter(rawgClient, new EmbeddingClient(httpClient, embeddingsUrl),
+            new GameSearchIndex(httpClient, qdrantUrl));
+        await importer.RunAsync(target, importCancellation.Token);
+    }
+    catch (OperationCanceledException) when (importCancellation.IsCancellationRequested)
+    {
+        Console.Error.WriteLine("Импорт остановлен. Повтор команды продолжит загрузку.");
+        Environment.ExitCode = 130;
+    }
+    catch (HttpRequestException error)
+    {
+        Console.Error.WriteLine($"Импорт остановлен. HTTP: {error.StatusCode?.ToString() ?? "сервис недоступен"}.");
+        Environment.ExitCode = 1;
+    }
+    catch (Exception error) when (error is IOException or InvalidDataException)
+    {
+        Console.Error.WriteLine(error.Message);
+        Environment.ExitCode = 1;
+    }
+    finally
+    {
+        Console.CancelKeyPress -= cancelImport;
+    }
+    return;
+}
+
 if (string.IsNullOrWhiteSpace(connectionString))
 {
     throw new InvalidOperationException("Задайте GAMEHUB_CONNECTION_STRING или DatabaseConnectionString в appsettings.Local.json.");
@@ -64,14 +114,11 @@ var sessions = new RefreshSessions(database, tokenService);
 var authorizeController = new AuthorizeController(database, tokenService, sessions);
 var favoritesController = new FavoritesController(database);
 var settingsController = new SettingsController(database);
-using var httpClient = new HttpClient();
-var rawgClient = new RawgClient(httpClient, apiKey);
 var gamesController = new GamesController(rawgClient);
-var recommendations = new SemanticRecommendations(
-    httpClient,
-    rawgClient,
-    new Uri(Environment.GetEnvironmentVariable("GAMEHUB_EMBEDDINGS_URL") ?? "http://127.0.0.1:18081"),
-    new Uri(Environment.GetEnvironmentVariable("GAMEHUB_QDRANT_URL") ?? "http://127.0.0.1:6333"));
+var steamNewsController = new SteamNewsController(new SteamClient(httpClient));
+var rerankerUrl = string.Equals(Environment.GetEnvironmentVariable("GAMEHUB_RERANKER_ENABLED"), "false", StringComparison.OrdinalIgnoreCase)
+    ? null : new Uri(Environment.GetEnvironmentVariable("GAMEHUB_RERANKER_URL") ?? "http://127.0.0.1:18083");
+var recommendations = new SemanticRecommendations(httpClient, rawgClient, embeddingsUrl, qdrantUrl, rerankerUrl);
 var recommendationsController = new RecommendationsController(recommendations);
 router.Register("GET", "/health", healthController.CheckHealthAsync);
 router.Register("GET", "/health/db", healthController.CheckDatabaseAsync);
@@ -81,6 +128,8 @@ router.Register("GET", "/recommendations", homeController.RecommendationsAsync);
 router.Register("GET","/games", gamesController.GetAllAsync);
 router.Register("GET", "/games/featured", gamesController.GetFeaturedAsync);
 router.Register("POST", "/games/recommendations", recommendationsController.SearchAsync);
+router.Register("GET", "/steam/search", steamNewsController.SearchAsync);
+router.Register("GET", "/steam/news", steamNewsController.GetNewsAsync);
 router.Register("POST", "/register", authorizeController.RegisterAsync);
 router.Register("POST", "/login", authorizeController.LoginAsync);
 router.Register("POST", "/auth/refresh", authorizeController.RefreshAsync);
