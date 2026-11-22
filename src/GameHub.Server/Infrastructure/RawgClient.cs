@@ -26,7 +26,8 @@ public class RawgClient
         string? tag = null,
         string? genre = null,
         CancellationToken cancellationToken = default,
-        string? dates = null)
+        string? dates = null,
+        IReadOnlyList<int>? ids = null)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(page, 1);
         ArgumentOutOfRangeException.ThrowIfLessThan(pageSize, 1);
@@ -42,6 +43,9 @@ public class RawgClient
 
         if (genre is not null)
             requestUrl += $"&genres={Uri.EscapeDataString(genre)}";
+
+        if (ids is { Count: > 0 })
+            requestUrl += $"&ids={Uri.EscapeDataString(string.Join(',', ids))}";
 
         if (dates is null && ordering == "-released")
         {

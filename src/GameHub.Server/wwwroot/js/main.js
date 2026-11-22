@@ -94,6 +94,8 @@ function initRecommendations() {
     const recommendations = createRecommendations(favorites);
     const form = document.getElementById("recommendation-form");
     const description = document.getElementById("recommendation-description");
+    const tagInput = document.getElementById("recommendation-tags");
+    const tagChoices = document.getElementById("recommendation-tag-choices");
     const descriptionFields = document.getElementById("recommendation-description-fields");
     const search = document.getElementById("search-recommendations");
     const reset = document.getElementById("reset-recommendations");
@@ -111,7 +113,9 @@ function initRecommendations() {
     let sortOptions = defaultSettings;
     let accountVersion = 0;
     let activeDescription = "";
+    let activeTags = [];
     let latestRequest = 0;
+    const chosenTags = new Map();
 
     openSettings.addEventListener("click", () => {
         byDescription.checked = sortOptions.description;
@@ -202,17 +206,82 @@ function initRecommendations() {
         all.indeterminate = byDescription.checked !== byPersonal.checked;
     }
 
+    function enteredTags() {
+        return tagInput.value.split(",").map(tag => tag.trim()).filter(Boolean);
+    }
+
+    function clearValidity() {
+        description.setCustomValidity("");
+        tagInput.setCustomValidity("");
+    }
+
+    function showTagChoices(unresolvedTags = []) {
+        tagChoices.replaceChildren();
+        tagChoices.hidden = unresolvedTags.length === 0;
+        for (const { input, suggestions } of unresolvedTags) {
+            const group = document.createElement("div");
+            const label = document.createElement("p");
+            label.textContent = suggestions.length
+                ? `Выбери тег для «${input}»`
+                : `Для «${input}» не нашли близких тегов. Попробуй другой вариант.`;
+            const actions = document.createElement("div");
+            actions.className = "recommendation-actions";
+            for (const option of suggestions) {
+                const button = document.createElement("button");
+                button.type = "button";
+                button.className = "button button-secondary";
+                button.textContent = option.isGenre ? `${option.name} (жанр)` : option.name;
+                button.addEventListener("click", () => {
+                    const tags = enteredTags();
+                    const index = tags.indexOf(input);
+                    if (index === -1) return;
+                    const name = option.name.includes(",") ? option.id : button.textContent;
+                    chosenTags.set(name, option.id);
+                    tags[index] = name;
+                    tagInput.value = tags.join(", ");
+                    clearValidity();
+                    tagInput.focus();
+                    form.requestSubmit();
+                });
+                actions.append(button);
+            }
+            group.append(label, actions);
+            tagChoices.append(group);
+        }
+    }
+
+    description.addEventListener("input", clearValidity);
+    tagInput.addEventListener("input", () => {
+        clearValidity();
+        showTagChoices();
+        const terms = enteredTags();
+        for (const name of chosenTags.keys()) {
+            if (!terms.includes(name)) chosenTags.delete(name);
+        }
+    });
+
     form.addEventListener("submit", event => {
         event.preventDefault();
         if (!sortOptions.description) return;
         description.value = description.value.trim();
-        if (!description.reportValidity()) return;
+        const terms = enteredTags();
+        if (!description.value && terms.length === 0) {
+            description.setCustomValidity("Введи описание или хотя бы один тег.");
+        }
+        if (terms.length > 6 || terms.some(tag => tag.length > 100)) {
+            tagInput.setCustomValidity("Введи до 6 тегов по 100 символов.");
+        }
+        if (!form.reportValidity()) return;
         activeDescription = description.value;
+        activeTags = terms.map(tag => chosenTags.get(tag) ?? tag);
         void loadRecommendations();
     });
     reset.addEventListener("click", () => {
         form.reset();
+        clearValidity();
+        chosenTags.clear();
         activeDescription = "";
+        activeTags = [];
         description.focus();
         void loadRecommendations();
     });
@@ -221,17 +290,24 @@ function initRecommendations() {
 
     async function loadRecommendations() {
         const query = sortOptions.description ? activeDescription : "";
+        const tags = sortOptions.description ? activeTags : [];
+        const searching = Boolean(query || tags.length);
         const request = ++latestRequest;
-        reset.hidden = !query;
-        recommendations.startLoading(Boolean(query));
+        reset.hidden = !searching;
+        showTagChoices();
+        recommendations.startLoading(searching);
         try {
-            const data = query ? await getRecommendations(query) : await getGames();
+            const data = searching ? await getRecommendations(query, tags) : await getGames();
             if (request !== latestRequest) return;
+            const draft = enteredTags().map(tag => chosenTags.get(tag) ?? tag);
+            if (draft.length === tags.length && draft.every((tag, index) => tag === tags[index])) {
+                showTagChoices(data.unresolvedTags);
+            }
             recommendations.setResults(data);
         } catch (error) {
             if (request !== latestRequest) return;
             console.error("Не удалось загрузить рекомендации:", error);
-            recommendations.showError(Boolean(query));
+            recommendations.showError(searching);
         }
     }
 }

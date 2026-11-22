@@ -170,10 +170,10 @@ main[data-current-page="library"] #catalog-title {
     font-weight: 650;
 }
 
-.recommendation-form textarea {
+.recommendation-form textarea,
+.recommendation-form input[type="text"] {
     width: 100%;
     padding: 12px 14px;
-    resize: vertical;
     background: #24282a;
     color: inherit;
     border: 1px solid #454d49;
@@ -181,13 +181,28 @@ main[data-current-page="library"] #catalog-title {
     font: inherit;
 }
 
-.recommendation-form textarea::placeholder {
+.recommendation-form textarea {
+    resize: vertical;
+}
+
+.recommendation-form textarea::placeholder,
+.recommendation-form input[type="text"]::placeholder {
     color: #a7adab;
 }
 
-.recommendation-form textarea:focus-visible {
+.recommendation-form textarea:focus-visible,
+.recommendation-form input[type="text"]:focus-visible {
     outline: 2px solid var(--lime);
     outline-offset: 2px;
+}
+
+.recommendation-tag-choices {
+    display: grid;
+    gap: 12px;
+}
+
+.recommendation-tag-choices p {
+    margin: 0 0 6px;
 }
 
 .recommendation-actions {

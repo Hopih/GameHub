@@ -10,14 +10,18 @@ export function createRecommendations(favorites) {
 
     function renderRecommendations() {
         if (!selection) return;
-        const { results, tags } = selection;
+        const { results, tags, unresolvedTags } = selection;
         const games = tags ? results : results.filter(game => !favorites.has(game.id)).slice(0, 12);
 
         renderGameCards(grid, games, favorites);
         if (tags) {
-            status.textContent = games.length
-                ? (tags.length ? `Подходящие теги — ${tags.join(", ")}.` : "Игры по твоему описанию.")
-                : "Не нашли подходящих игр. Попробуй описать жанр или игровые механики.";
+            if (unresolvedTags?.length) {
+                status.textContent = "Уточни теги, чтобы продолжить поиск.";
+            } else if (games.length) {
+                status.textContent = tags.length ? `Подходящие теги — ${tags.join(", ")}.` : "Игры по твоему описанию.";
+            } else {
+                status.textContent = "Не нашли подходящих игр. Попробуй изменить запрос.";
+            }
         } else {
             status.textContent = games.length
                 ? "Популярные игры из каталога."
@@ -28,9 +32,9 @@ export function createRecommendations(favorites) {
     favorites.subscribe(renderRecommendations);
 
     return {
-        startLoading(byDescription) {
+        startLoading(searching) {
             selection = null;
-            status.textContent = byDescription ? "Подбираем игры по описанию…" : "Загружаем игры из каталога…";
+            status.textContent = searching ? "Подбираем игры…" : "Загружаем игры из каталога…";
             grid.replaceChildren();
             grid.setAttribute("aria-busy", "true");
             retry.hidden = true;
@@ -39,11 +43,11 @@ export function createRecommendations(favorites) {
             selection = data;
             renderRecommendations();
         },
-        showError(byDescription) {
+        showError(searching) {
             selection = null;
             grid.setAttribute("aria-busy", "false");
-            status.textContent = byDescription
-                ? "Поиск по описанию временно недоступен. Попробуй ещё раз."
+            status.textContent = searching
+                ? "Поиск игр временно недоступен. Попробуй ещё раз."
                 : "Не удалось загрузить рекомендации.";
             retry.hidden = false;
         }

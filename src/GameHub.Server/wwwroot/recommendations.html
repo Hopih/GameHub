@@ -52,8 +52,13 @@
                 <form id="recommendation-form" class="recommendation-form">
                     <div id="recommendation-description-fields" class="recommendation-description-fields">
                         <label for="recommendation-description">Какую игру ищешь?</label>
-                        <textarea id="recommendation-description" rows="3" maxlength="1000" required
+                        <textarea id="recommendation-description" rows="3" maxlength="1000"
                                   placeholder="Например, хочу строить заводы и прокладывать конвейеры"></textarea>
+                        <label for="recommendation-tags">Теги</label>
+                        <input id="recommendation-tags" type="text" maxlength="610"
+                               placeholder="Например, кооператив, автоматизация" aria-describedby="recommendation-tags-help">
+                        <p id="recommendation-tags-help" class="section-note">До 6 тегов через запятую. Можно искать только по тегам.</p>
+                        <div id="recommendation-tag-choices" class="recommendation-tag-choices" aria-live="polite" hidden></div>
                     </div>
                     <div class="recommendation-actions">
                         <button id="search-recommendations" class="button button-primary" type="submit">Подобрать игры</button>

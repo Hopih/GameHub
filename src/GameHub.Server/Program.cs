@@ -46,10 +46,18 @@ var rawgClient = new RawgClient(httpClient, apiKey);
 var embeddingsUrl = new Uri(Environment.GetEnvironmentVariable("GAMEHUB_EMBEDDINGS_URL") ?? "http://127.0.0.1:18081");
 var qdrantUrl = new Uri(Environment.GetEnvironmentVariable("GAMEHUB_QDRANT_URL") ?? "http://127.0.0.1:6333");
 
-if (args.FirstOrDefault() == "--import-games")
+var command = args.FirstOrDefault();
+if (command is "--import-games" or "--backfill-game-tags")
 {
     var target = GameIndexImporter.GameCount;
-    if (args.Length > 2 || args.Length == 2 && (!int.TryParse(args[1], out target) || target is < 1 or > GameIndexImporter.GameCount))
+    if (command == "--backfill-game-tags" && args.Length != 1)
+    {
+        Console.Error.WriteLine("Запустите --backfill-game-tags без дополнительных аргументов.");
+        Environment.ExitCode = 2;
+        return;
+    }
+    if (command == "--import-games" &&
+        (args.Length > 2 || args.Length == 2 && (!int.TryParse(args[1], out target) || target is < 1 or > GameIndexImporter.GameCount)))
     {
         Console.Error.WriteLine($"Укажите число игр от 1 до {GameIndexImporter.GameCount} или запустите --import-games без числа.");
         Environment.ExitCode = 2;
@@ -67,7 +75,10 @@ if (args.FirstOrDefault() == "--import-games")
     {
         var importer = new GameIndexImporter(rawgClient, new EmbeddingClient(httpClient, embeddingsUrl),
             new GameSearchIndex(httpClient, qdrantUrl));
-        await importer.RunAsync(target, importCancellation.Token);
+        if (command == "--backfill-game-tags")
+            await importer.BackfillPublishedTagsAsync(importCancellation.Token);
+        else
+            await importer.RunAsync(target, importCancellation.Token);
     }
     catch (OperationCanceledException) when (importCancellation.IsCancellationRequested)
     {

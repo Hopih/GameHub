@@ -34,11 +34,11 @@ export async function getFeaturedGames() {
     return data.results;
 }
 
-export async function getRecommendations(description) {
+export async function getRecommendations(description, tags = []) {
     const data = await getGameList("/games/recommendations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ description })
+        body: JSON.stringify({ description, tags })
     });
     if (!Array.isArray(data.tags) || !data.tags.every(tag => typeof tag === "string")) {
         throw new Error("Unexpected recommendation tags");

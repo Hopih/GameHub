@@ -68,9 +68,79 @@ internal sealed class GameIndexImporter(RawgClient rawg, EmbeddingClient embeddi
         if (await index.CountAsync(collection, token) != target)
             throw new InvalidDataException($"В подборке получено {completed} из {target} игр с описаниями.");
 
+        await BackfillTagsAsync(collection, token);
         if (target == GameCount)
             await index.PublishAsync(collection, version, token);
         Console.WriteLine($"Индекс готов. Коллекция {collection}, игр: {target}.");
+    }
+
+    public async Task BackfillPublishedTagsAsync(CancellationToken token)
+    {
+        var version = await embeddings.GetModelVersionAsync(token);
+        var collection = await index.GetPublishedCollectionAsync(version, token)
+            ?? throw new InvalidDataException("Активный индекс игр не найден. Сначала запустите импорт игр.");
+        await BackfillTagsAsync(collection, token);
+        Console.WriteLine($"Теги игр готовы. Коллекция {collection}.");
+    }
+
+    private async Task BackfillTagsAsync(string collection, CancellationToken token)
+    {
+        var directory = Path.Combine(".local", "game-index");
+        Directory.CreateDirectory(directory);
+        var lockPath = Path.Combine(directory, $"{index.Scope}_{collection}_tags.lock");
+        await using var migrationLock = File.Open(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+
+        const int concurrency = 8;
+        var updated = 0;
+        while (true)
+        {
+            var pending = await index.FindGamesWithoutTagsAsync(collection, PageSize * concurrency, token)
+                ?? throw new InvalidDataException("Коллекция игр исчезла во время загрузки тегов.");
+            if (pending.Length == 0)
+                return;
+            await Parallel.ForEachAsync(pending.Chunk(PageSize),
+                new ParallelOptions { MaxDegreeOfParallelism = concurrency, CancellationToken = token },
+                async (ids, cancel) =>
+                {
+                    var tags = await LoadTagBatchAsync(ids, cancel);
+                    await index.SaveTagsAsync(collection, tags, cancel);
+                });
+            updated += pending.Length;
+            Console.WriteLine($"Записаны теги игр: {updated}.");
+        }
+    }
+
+    private async Task<Dictionary<int, string[]>> LoadTagBatchAsync(int[] ids, CancellationToken token)
+    {
+        var json = await RetryRawgAsync(() => rawg.GetGamesAsync(pageSize: ids.Length, ids: ids, cancellationToken: token), token);
+        using var page = JsonDocument.Parse(json);
+        var tags = new Dictionary<int, string[]>();
+        var expected = ids.ToHashSet();
+        foreach (var game in page.RootElement.GetProperty("results").EnumerateArray())
+        {
+            var id = game.GetProperty("id").GetInt32();
+            if (!expected.Contains(id))
+                throw new InvalidDataException("RAWG вернул игру за пределами запрошенной подборки.");
+            if (game.TryGetProperty("tags", out var list) && list.ValueKind == JsonValueKind.Array)
+                tags[id] = ReadTagSlugs(game);
+        }
+
+        foreach (var id in ids.Where(id => !tags.ContainsKey(id)))
+        {
+            try
+            {
+                var game = await RetryRawgAsync(() => rawg.GetGameAsync(id.ToString(CultureInfo.InvariantCulture), token), token);
+                using var detail = JsonDocument.Parse(game);
+                if (!detail.RootElement.TryGetProperty("tags", out var list) || list.ValueKind != JsonValueKind.Array)
+                    throw new InvalidDataException($"RAWG не вернул теги игры {id}.");
+                tags[id] = ReadTagSlugs(detail.RootElement);
+            }
+            catch (HttpRequestException error) when (error.StatusCode == HttpStatusCode.NotFound)
+            {
+                tags[id] = [];
+            }
+        }
+        return tags;
     }
 
     private async Task<ImportCandidate[]> LoadCandidatesAsync(string path, int target, CancellationToken token)
@@ -182,7 +252,7 @@ internal sealed class GameIndexImporter(RawgClient rawg, EmbeddingClient embeddi
             name, ReadString(game, "background_image"), metacritic, added, released!, ReadTaxonomy(game, "genres"));
         var features = tags.Where(tag => !tag.Slug.StartsWith("steam-", StringComparison.Ordinal))
             .Select(tag => tag.Name).Distinct(StringComparer.OrdinalIgnoreCase).Take(18).ToArray();
-        return new ImportCandidate(card, features, quality);
+        return new ImportCandidate(card, features, quality, tags.Select(tag => tag.Slug).Distinct().ToArray());
     }
 
     private async Task<ImportGame[]> ReadDescriptionsAsync(ImportCandidate[] batch, CancellationToken token)
@@ -213,7 +283,8 @@ internal sealed class GameIndexImporter(RawgClient rawg, EmbeddingClient embeddi
                     var description = text.Length > 2200 ? text[..2200] : text;
                     docs[i] = new ImportGame(candidate.Card,
                         $"passage: {candidate.Card.Name}. Genres: {genres}. Features: {tags}. {description}",
-                        GameRankingText.Create(root, candidate.Card.Name, text));
+                        GameRankingText.Create(root, candidate.Card.Name, text),
+                        candidate.TagSlugs ?? ReadTagSlugs(root));
                 }
                 catch (HttpRequestException error) when (error.StatusCode == HttpStatusCode.NotFound)
                 {
@@ -247,7 +318,7 @@ internal sealed class GameIndexImporter(RawgClient rawg, EmbeddingClient embeddi
         try
         {
             await index.AddAsync(collection, games.Select(game => game.Card).ToArray(), vectors.ToArray(),
-                games.Select(game => game.RankingText).ToArray(), token);
+                games.Select(game => game.RankingText).ToArray(), games.Select(game => game.TagSlugs).ToArray(), token);
         }
         catch (HttpRequestException error)
         {
@@ -275,6 +346,9 @@ internal sealed class GameIndexImporter(RawgClient rawg, EmbeddingClient embeddi
                 .Select(value => new GameSearchGenre(ReadString(value, "slug")!, ReadString(value, "name") ?? "")).ToArray()
             : [];
 
+    private static string[] ReadTagSlugs(JsonElement item) =>
+        ReadTaxonomy(item, "tags").Select(tag => tag.Slug).Distinct().ToArray();
+
     private static string? ReadString(JsonElement item, string property) =>
         item.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(value.GetString())
             ? value.GetString() : null;
@@ -285,6 +359,6 @@ internal sealed class GameIndexImporter(RawgClient rawg, EmbeddingClient embeddi
     private static string EditionKey(string title) => EditionSuffix.Replace(title, "").TrimEnd(' ', ':', '-', '–', '—', '(', '[');
 
     private sealed record CatalogSource(int Pages, string? Genre, string Dates);
-    private sealed record ImportCandidate(GameSearchCard Card, string[] Features, double Score);
-    private sealed record ImportGame(GameSearchCard Card, string Passage, string RankingText);
+    private sealed record ImportCandidate(GameSearchCard Card, string[] Features, double Score, string[]? TagSlugs = null);
+    private sealed record ImportGame(GameSearchCard Card, string Passage, string RankingText, string[] TagSlugs);
 }
