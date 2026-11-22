@@ -34,7 +34,7 @@ internal sealed class SteamClient(HttpClient httpClient)
             .Select(item => new SteamPost(item.Title!, item.Url!, item.Date))
             .ToArray();
     }
-
+    
     private static bool IsArticleUrl(string? value) =>
         Uri.TryCreate(value, UriKind.Absolute, out var uri) &&
         uri.Scheme is "https" or "http" && uri.Host.Length > 0 && uri.UserInfo.Length == 0;

@@ -115,7 +115,7 @@ var authorizeController = new AuthorizeController(database, tokenService, sessio
 var favoritesController = new FavoritesController(database);
 var settingsController = new SettingsController(database);
 var gamesController = new GamesController(rawgClient);
-var steamNewsController = new SteamNewsController(new SteamClient(httpClient));
+var steamNewsController = new SteamNewsController(new SteamClient(httpClient) , database);
 var rerankerUrl = string.Equals(Environment.GetEnvironmentVariable("GAMEHUB_RERANKER_ENABLED"), "false", StringComparison.OrdinalIgnoreCase)
     ? null : new Uri(Environment.GetEnvironmentVariable("GAMEHUB_RERANKER_URL") ?? "http://127.0.0.1:18083");
 var recommendations = new SemanticRecommendations(httpClient, rawgClient, embeddingsUrl, qdrantUrl, rerankerUrl);
@@ -141,6 +141,7 @@ router.RegisterProtected("DELETE", "/favorites", tokenService, favoritesControll
 router.RegisterProtected("DELETE","/favorites/clear", tokenService, favoritesController.ClearAsync);
 router.RegisterProtected("GET", "/settings", tokenService, settingsController.GetAsync);
 router.RegisterProtected("PUT", "/settings", tokenService, settingsController.SaveAsync);
+router.RegisterProtected("GET","/steam/news/favorites" , tokenService , steamNewsController.SearchRecommendedAsync);
 
 var staticFiles = new StaticFileHandler(Path.Combine(AppContext.BaseDirectory, "wwwroot"));
 var server = new HttpServer(router, staticFiles);
