@@ -13,7 +13,7 @@ internal sealed class GameReranker(HttpClient http, Uri url, RawgClient rawg, Ga
     private readonly SemaphoreSlim _cacheFill = new(1);
 
     public async Task<IndexedGame[]> RankAsync(
-        string query, string version, IndexedGame[] candidates, CancellationToken cancellationToken)
+        string query, string? version, IndexedGame[] candidates, CancellationToken cancellationToken)
     {
         if (candidates.Length < 2)
             return candidates;
@@ -58,7 +58,7 @@ internal sealed class GameReranker(HttpClient http, Uri url, RawgClient rawg, Ga
         }
     }
 
-    private async Task<string[]?> PrepareTextsAsync(string version, IndexedGame[] candidates, CancellationToken token)
+    private async Task<string[]?> PrepareTextsAsync(string? version, IndexedGame[] candidates, CancellationToken token)
     {
         var texts = candidates.Select(candidate => candidate.RankingText).ToArray();
         var missing = Enumerable.Range(0, texts.Length).Where(i => texts[i] is null).ToArray();
@@ -101,7 +101,7 @@ internal sealed class GameReranker(HttpClient http, Uri url, RawgClient rawg, Ga
 
             var fetched = missing.Where(i => texts[i] is not null)
                 .Select(i => new GameRankingDocument(candidates[i].Id, texts[i]!)).ToArray();
-            if (fetched.Length > 0)
+            if (version is not null && fetched.Length > 0)
             {
                 try { await index.SaveRankingTextsAsync(version, fetched, token); }
                 catch (HttpRequestException error)

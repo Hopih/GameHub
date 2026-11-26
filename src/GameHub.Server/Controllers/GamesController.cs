@@ -31,16 +31,15 @@ public class GamesController
         }
 
         string? search = context.Request.QueryString["search"]?.Trim();
-        string rawgJson = await _rawgClient.GetGamesAsync(page, 40, ordering, search);
-        using var document = JsonDocument.Parse(rawgJson);
+        var games = await GetCatalogPageAsync(page, ordering, search);
 
         var response = new
         {
             page,
             ordering,
-            hasNext = document.RootElement.GetProperty("next").ValueKind == JsonValueKind.String,
-            count = document.RootElement.GetProperty("count").GetInt32(),
-            results = document.RootElement.GetProperty("results")
+            hasNext = games.GetProperty("next").ValueKind == JsonValueKind.String,
+            count = games.GetProperty("count").GetInt32(),
+            results = games.GetProperty("results")
         };
 
         string responseJson = JsonSerializer.Serialize(response);
@@ -49,6 +48,33 @@ public class GamesController
             responseJson,
             HttpStatusCode.OK,
             "application/json; charset=utf-8");
+    }
+
+    private async Task<JsonElement> GetCatalogPageAsync(int page, string ordering, string? search)
+    {
+        if (!string.IsNullOrEmpty(search))
+        {
+            try
+            {
+                var exact = await FetchPageAsync(page, searchExact: true);
+                if (exact.GetProperty("count").GetInt32() > 0)
+                    return exact;
+            }
+            catch (HttpRequestException error) when (page > 1 && error.StatusCode == HttpStatusCode.NotFound)
+            {
+                var firstPage = await FetchPageAsync(1, searchExact: true);
+                if (firstPage.GetProperty("count").GetInt32() > 0)
+                    throw;
+            }
+        }
+
+        return await FetchPageAsync(page, searchExact: false);
+
+        async Task<JsonElement> FetchPageAsync(int rawgPage, bool searchExact)
+        {
+            var json = await _rawgClient.GetGamesAsync(rawgPage, 40, ordering, search, searchExact: searchExact);
+            return JsonSerializer.Deserialize<JsonElement>(json);
+        }
     }
 
     public async Task GetFeaturedAsync(HttpListenerContext context)

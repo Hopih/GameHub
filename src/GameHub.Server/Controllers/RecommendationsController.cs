@@ -42,11 +42,6 @@ public sealed class RecommendationsController(SemanticRecommendations recommenda
         {
             result = await recommendations.FindAsync(description, tags.Distinct(StringComparer.OrdinalIgnoreCase).ToArray(), timeout.Token);
         }
-        catch (GameTagsUnavailableException)
-        {
-            await ResponseWriter.SendAsync(context.Response, "Теги каталога ещё загружаются. Попробуй чуть позже.", HttpStatusCode.ServiceUnavailable);
-            return;
-        }
         catch (Exception error) when (error is HttpRequestException or OperationCanceledException or InvalidDataException)
         {
             Console.Error.WriteLine($"Сервис рекомендаций недоступен ({error.GetType().Name}).");

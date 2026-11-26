@@ -12,6 +12,8 @@ public sealed class SemanticRecommendations
     private const int TagLimit = 3;
     private const int TagSearchLimit = 8;
     private const int GameLimit = 12;
+    private const int RawgPageSize = 40;
+    private const int RawgPageLimit = 3;
     private const double MinBestTagScore = 0.82;
     private const double MinTagScore = 0.80;
     private const double MaxTagScoreGap = 0.027;
@@ -86,21 +88,23 @@ public sealed class SemanticRecommendations
         if (terms.Length == 0)
             return await FindAsync(description, cancellationToken);
 
-        var hasDescription = description.Length > 0;
-        var inputs = (hasDescription ? new[] { description }.Concat(terms) : terms)
-            .Select(text => $"query: {text}").ToArray();
-        var version = await _embeddings.GetModelVersionAsync(cancellationToken);
-        var vectors = await _embeddings.EmbedAsync(inputs, cancellationToken);
         var explicitTags = terms.Select(FindExactTags).ToArray();
-        var curatedCollection = $"gamehub_recommendation_tags_{version}_{_tagVersion}";
-        var rawgCollection = $"gamehub_recommendation_rawg_tags_{version}_{_rawgTagVersion}";
-        var rawgReady = false;
-        if (explicitTags.Any(matches => matches.Length == 0))
+        var unknown = Enumerable.Range(0, terms.Length).Where(i => explicitTags[i].Length == 0).ToArray();
+        string? version = null;
+        if (unknown.Length > 0)
         {
+            version = await _embeddings.GetModelVersionAsync(cancellationToken);
+            var vectors = await _embeddings.EmbedAsync(unknown.Select(i => $"query: {terms[i]}").ToArray(), cancellationToken);
+            var curatedCollection = $"gamehub_recommendation_tags_{version}_{_tagVersion}";
+            var rawgCollection = $"gamehub_recommendation_rawg_tags_{version}_{_rawgTagVersion}";
             await EnsureIndexAsync(curatedCollection, vectors[0].Length, cancellationToken);
-            rawgReady = await GetPointCountAsync(rawgCollection, cancellationToken) == _rawgTags.Length;
+            var rawgReady = await GetPointCountAsync(rawgCollection, cancellationToken) == _rawgTags.Length;
             if (!rawgReady)
                 _ = BuildRawgIndexAsync(rawgCollection, vectors[0].Length);
+
+            for (var i = 0; i < unknown.Length; i++)
+                explicitTags[unknown[i]] = await ResolveTagVectorAsync(
+                    curatedCollection, rawgReady ? rawgCollection : null, vectors[i], cancellationToken);
         }
 
         var selected = new List<RecommendationTag>();
@@ -108,11 +112,6 @@ public sealed class SemanticRecommendations
         for (var i = 0; i < terms.Length; i++)
         {
             var matches = explicitTags[i];
-            if (matches.Length == 0)
-            {
-                var vector = vectors[i + (hasDescription ? 1 : 0)];
-                matches = await ResolveTagVectorAsync(curatedCollection, rawgReady ? rawgCollection : null, vector, cancellationToken);
-            }
             if (matches.Length == 1 && matches[0].Confident)
                 selected.Add(matches[0].Tag);
             else
@@ -125,16 +124,65 @@ public sealed class SemanticRecommendations
         if (unresolved.Count > 0)
             return new RecommendationResult(names, [], unresolved.ToArray());
 
-        if (await _games.FindGamesWithoutTagsAsync(GameSearchIndex.Alias(version), 1, cancellationToken) is not { Length: 0 })
-            throw new GameTagsUnavailableException();
+        var rerank = description.Length > 0 && _reranker is not null;
+        var limit = rerank ? GameReranker.CandidateLimit : GameLimit;
+        IndexedGame[]? candidates = null;
+        string? rankingCacheVersion = null;
+        try
+        {
+            version ??= await _embeddings.GetModelVersionAsync(cancellationToken);
+            if (tags.All(tag => tag.IsGenre)
+                || await _games.FindGamesWithoutTagsAsync(GameSearchIndex.Alias(version), 1, cancellationToken) is { Length: 0 })
+            {
+                var vector = description.Length > 0
+                    ? (await _embeddings.EmbedAsync([$"query: {description}"], cancellationToken))[0]
+                    : null;
+                candidates = await _games.SearchAsync(version, vector, limit, rerank, cancellationToken,
+                    tags.Select(tag => new GameTagFilter(tag.Slug, tag.IsGenre)).ToArray());
+                rankingCacheVersion = version;
+            }
+        }
+        catch (Exception error) when (error is HttpRequestException or InvalidDataException)
+        {
+            Console.Error.WriteLine($"Поиск по индексу тегов недоступен ({error.GetType().Name}). Используем каталог RAWG.");
+        }
 
-        var rerank = hasDescription && _reranker is not null;
-        var candidates = await _games.SearchAsync(version, hasDescription ? vectors[0] : null,
-            rerank ? GameReranker.CandidateLimit : GameLimit, rerank, cancellationToken,
-            tags.Select(tag => new GameTagFilter(tag.Slug, tag.IsGenre)).ToArray());
+        candidates ??= await FindRawgGamesByTagsAsync(tags, limit, rerank, cancellationToken);
         if (rerank)
-            candidates = await _reranker!.RankAsync(description, version, candidates, cancellationToken);
+            candidates = await _reranker!.RankAsync(description, rankingCacheVersion, candidates, cancellationToken);
         return new RecommendationResult(names, candidates.Take(GameLimit).Select(candidate => candidate.Game).ToArray());
+    }
+
+    private async Task<IndexedGame[]> FindRawgGamesByTagsAsync(RecommendationTag[] tags, int limit, bool includeRankingText,
+        CancellationToken cancellationToken)
+    {
+        var tagSlugs = string.Join(',', tags.Where(tag => !tag.IsGenre).Select(tag => tag.Slug));
+        var genreSlugs = string.Join(',', tags.Where(tag => tag.IsGenre).Select(tag => tag.Slug));
+        var results = new List<IndexedGame>(limit);
+        var ids = new HashSet<int>();
+        for (var page = 1; page <= RawgPageLimit && results.Count < limit; page++)
+        {
+            var json = await _rawgClient.GetGamesAsync(page, RawgPageSize, tag: tagSlugs, genre: genreSlugs,
+                cancellationToken: cancellationToken);
+            var data = JsonSerializer.Deserialize<JsonElement>(json);
+            foreach (var game in data.GetProperty("results").EnumerateArray())
+            {
+                var id = game.GetProperty("id").GetInt32();
+                // RAWG can return games matching only part of a comma-separated filter.
+                if (!tags.All(tag => MatchesTag(game, tag)) || !ids.Add(id))
+                    continue;
+                var text = includeRankingText
+                    ? GameRankingText.Create(game, game.GetProperty("name").GetString() ?? "", GameRankingText.ReadDescription(game))
+                    : null;
+                results.Add(new IndexedGame(id, game, text));
+                if (results.Count == limit)
+                    break;
+            }
+
+            if (!data.TryGetProperty("next", out var next) || next.ValueKind != JsonValueKind.String)
+                break;
+        }
+        return results.ToArray();
     }
 
     private ExplicitTagMatch[] FindExactTags(string term)
@@ -410,5 +458,3 @@ public sealed class SemanticRecommendations
     public sealed record RecommendationResult(string[] Tags, JsonElement[] Results,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] UnresolvedTag[]? UnresolvedTags = null);
 }
-
-internal sealed class GameTagsUnavailableException : Exception;

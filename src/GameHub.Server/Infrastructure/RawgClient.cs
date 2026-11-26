@@ -27,7 +27,8 @@ public class RawgClient
         string? genre = null,
         CancellationToken cancellationToken = default,
         string? dates = null,
-        IReadOnlyList<int>? ids = null)
+        IReadOnlyList<int>? ids = null,
+        bool searchExact = false)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(page, 1);
         ArgumentOutOfRangeException.ThrowIfLessThan(pageSize, 1);
@@ -36,12 +37,14 @@ public class RawgClient
         if (!string.IsNullOrWhiteSpace(search))
         {
             requestUrl += $"&search={Uri.EscapeDataString(search)}";
+            if (searchExact)
+                requestUrl += "&search_exact=true";
         }
 
-        if (tag is not null)
+        if (!string.IsNullOrEmpty(tag))
             requestUrl += $"&tags={Uri.EscapeDataString(tag)}";
 
-        if (genre is not null)
+        if (!string.IsNullOrEmpty(genre))
             requestUrl += $"&genres={Uri.EscapeDataString(genre)}";
 
         if (ids is { Count: > 0 })

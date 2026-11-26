@@ -31,7 +31,7 @@ internal sealed class GameSearchIndex(HttpClient http, Uri url)
         using var response = await http.PostAsJsonAsync(CollectionUri(Alias(version), "/points/query"),
             new { query = vector, limit, score_threshold = vector is null ? (double?)null : MinimumScore, with_payload = fields, filter },
             token);
-        if (response.StatusCode == HttpStatusCode.NotFound)
+        if (response.StatusCode == HttpStatusCode.NotFound && tags is not { Length: > 0 })
             return [];
         var result = await ReadResultAsync(response, token);
         return result.GetProperty("points").EnumerateArray().Select(point =>
